@@ -19,7 +19,9 @@ def ints(value):
 
 def read_run(root, stem):
     events = []
-    for extension in ("stderr.log", "stdout.log"):
+    direct = root / (stem + ".trace.log")
+    extensions = ("trace.log",) if direct.exists() else ("stderr.log", "stdout.log")
+    for extension in extensions:
         log = root / (stem + "." + extension)
         if log.exists():
             for line in log.read_text(encoding="utf-8", errors="replace").splitlines():

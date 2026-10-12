@@ -86,6 +86,7 @@ foreach($ctx in $contexts){
    # Never terminate an unrelated process already listening on the selected port.
    try {$existing=Invoke-RestMethod -Uri "$base/health" -TimeoutSec 2;throw "Port $Port is occupied. Close the existing server before running."}
    catch {if($_.Exception.Message -like 'Port * is occupied*'){throw}}
+   if($TraceQ8Q4){$env:MTP_TRACE_FILE=Join-Path $out "$id.trace.log"}
    Write-Host "Starting $id"
    $proc=$null
    try{
@@ -141,6 +142,7 @@ foreach($ctx in $contexts){
  }
 }
 $diffs | Export-Csv -LiteralPath (Join-Path $out 'first-divergence.csv') -NoTypeInformation -Encoding utf8
+if($TraceQ8Q4){Remove-Item Env:MTP_TRACE_FILE -ErrorAction SilentlyContinue}
 Write-Host "Output: $out" 
 if($TraceQ8Q4){Write-Host "Next: python experiments/bonsai2-rx9060xt/runner/compare-mtp-traces.py `"$out`""}
 if(@($records | Where-Object status -eq 'ERROR').Count -gt 0){exit 1}
