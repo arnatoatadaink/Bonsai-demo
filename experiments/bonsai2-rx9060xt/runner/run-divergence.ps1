@@ -9,7 +9,8 @@ param(
  [int]$Context=32768,
  [int]$Seed=42,
  [int]$LoadTimeoutSec=180,
- [switch]$Include64K
+ [switch]$Include64K,
+ [switch]$TraceQ8Q4
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -23,19 +24,23 @@ if(!(Test-Path -LiteralPath $Server)){throw "Server not found: $Server"}
 if(!(Test-Path -LiteralPath $Model)){throw "Model not found: $Model"}
 if($MaxTokens -lt 32){throw 'MaxTokens must be >= 32'}
 if($Context -notin @(32768,65536)){throw 'Context must be 32768 or 65536'}
+if($TraceQ8Q4 -and $Include64K){throw 'TraceQ8Q4 and Include64K cannot be combined'}
+if($TraceQ8Q4 -and $Context -ne 32768){throw 'TraceQ8Q4 requires Context=32768'}
+if($TraceQ8Q4 -and $Mode -ne 'full'){throw 'TraceQ8Q4 requires Mode=full'}
 if($Include64K -and $Mode -eq 'smoke'){throw '64K only in full mode'}
 $reps=if($Mode -eq 'smoke'){1}else{3}
 $contexts=if($Include64K){@(32768,65536)}else{@($Context)}
 $prompt=if($PromptFile){Get-Content -LiteralPath $PromptFile -Raw -Encoding UTF8}else{
   "Review an access-control change: an API uses user.isSuspended, but one proposed patch checks isSuspended without a receiver. Analyze likely failure modes, list at least three tests, and propose a minimal safe fix. Explicitly distinguish confirmed facts from assumptions."
 }
+if($TraceQ8Q4){$env:LLAMA_TRACE='2'}
 $now=Get-Date -Format 'yyyyMMdd_HHmmss'
 $out=Join-Path $OutputRoot ("run_"+$now)
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $env:PATH=([IO.Path]::GetDirectoryName((Resolve-Path $Server).Path))+';D:\msys64\ucrt64\bin;'+$env:PATH
 $meta=[ordered]@{
  mode=$Mode; repeats=$reps; contexts=$contexts; seed=$Seed; max_tokens=$MaxTokens
- port=$Port; prompt_sha256=(Get-TextSha256 $prompt)
+ port=$Port; trace_q8q4=$TraceQ8Q4; prompt_sha256=(Get-TextSha256 $prompt)
  server_sha256=(Get-FileHash -LiteralPath $Server -Algorithm SHA256).Hash
  model_sha256=(Get-FileHash -LiteralPath $Model -Algorithm SHA256).Hash
  note='tokenization is post-hoc re-tokenization of visible API fields, not internal raw token IDs'
@@ -43,8 +48,10 @@ $meta=[ordered]@{
 $meta | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $out 'manifest.json') -Encoding utf8
 $prompt | Set-Content -LiteralPath (Join-Path $out 'prompt.txt') -Encoding utf8
 function Invoke-Json([string]$url,[object]$payload){
- $json=$payload | ConvertTo-Json -Depth 12 -Compress
- return Invoke-RestMethod -Uri $url -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType 'application/json; charset=utf-8' -TimeoutSec 600
+ $json=ConvertTo-Json -InputObject $payload -Depth 12 -Compress
+ $raw=[Text.Encoding]::UTF8.GetBytes($json)
+ if($raw.Length -gt 100000){throw "Unexpected HTTP payload size: $($raw.Length) bytes"}
+ return Invoke-RestMethod -Uri $url -Method Post -Body $raw -ContentType 'application/json; charset=utf-8' -TimeoutSec 600
 }
 function Get-TokenIds([string]$base,[string]$value){
  $r=Invoke-Json "$base/tokenize" @{content=$value;add_special=$false}
@@ -64,6 +71,7 @@ $cases=@(
  @{id='q8q4_off';k='q8_0';v='q4_0';mtp=$false},
  @{id='q8q4_on';k='q8_0';v='q4_0';mtp=$true}
 )
+if($TraceQ8Q4){$cases=@($cases | Where-Object {$_.id -eq 'q8q4_on'})}
 $base="http://127.0.0.1:$Port"
 foreach($ctx in $contexts){
  foreach($c in $cases){
@@ -133,5 +141,6 @@ foreach($ctx in $contexts){
  }
 }
 $diffs | Export-Csv -LiteralPath (Join-Path $out 'first-divergence.csv') -NoTypeInformation -Encoding utf8
-Write-Host "Output: $out"
+Write-Host "Output: $out" 
+if($TraceQ8Q4){Write-Host "Next: python experiments/bonsai2-rx9060xt/runner/compare-mtp-traces.py `"$out`""}
 if(@($records | Where-Object status -eq 'ERROR').Count -gt 0){exit 1}
