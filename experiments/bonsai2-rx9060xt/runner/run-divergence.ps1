@@ -29,13 +29,18 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $env:PATH=([IO.Path]::GetDirectoryName((Resolve-Path $Server).Path))+';D:\msys64\ucrt64\bin;'+$env:PATH
 $meta=[ordered]@{
  mode=$Mode; repeats=$reps; contexts=$contexts; seed=$Seed; max_tokens=$MaxTokens
- port=$Port; prompt_sha256=([BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($prompt))).Replace('-','').ToLower())
+ port=$Port; prompt_sha256=(Get-TextSha256 $prompt)
  server_sha256=(Get-FileHash -LiteralPath $Server -Algorithm SHA256).Hash
  model_sha256=(Get-FileHash -LiteralPath $Model -Algorithm SHA256).Hash
  note='tokenization is post-hoc re-tokenization of visible API fields, not internal raw token IDs'
 }
 $meta | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $out 'manifest.json') -Encoding utf8
 $prompt | Set-Content -LiteralPath (Join-Path $out 'prompt.txt') -Encoding utf8
+function Get-TextSha256([string]$value){
+ $sha=[Security.Cryptography.SHA256]::Create()
+ try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($value))).Replace('-','').ToLower())}
+ finally{$sha.Dispose()}
+}
 function Invoke-Json([string]$url,[object]$payload){
  $json=$payload | ConvertTo-Json -Depth 12 -Compress
  return Invoke-RestMethod -Uri $url -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType 'application/json; charset=utf-8' -TimeoutSec 600
