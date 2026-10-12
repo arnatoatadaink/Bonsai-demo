@@ -13,6 +13,12 @@ param(
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
+function Get-TextSha256([string]$value){
+ $sha=[Security.Cryptography.SHA256]::Create()
+ try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($value))).Replace('-','').ToLower())}
+ finally{$sha.Dispose()}
+}
+
 if(!(Test-Path -LiteralPath $Server)){throw "Server not found: $Server"}
 if(!(Test-Path -LiteralPath $Model)){throw "Model not found: $Model"}
 if($MaxTokens -lt 32){throw 'MaxTokens must be >= 32'}
@@ -36,11 +42,6 @@ $meta=[ordered]@{
 }
 $meta | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $out 'manifest.json') -Encoding utf8
 $prompt | Set-Content -LiteralPath (Join-Path $out 'prompt.txt') -Encoding utf8
-function Get-TextSha256([string]$value){
- $sha=[Security.Cryptography.SHA256]::Create()
- try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($value))).Replace('-','').ToLower())}
- finally{$sha.Dispose()}
-}
 function Invoke-Json([string]$url,[object]$payload){
  $json=$payload | ConvertTo-Json -Depth 12 -Compress
  return Invoke-RestMethod -Uri $url -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($json)) -ContentType 'application/json; charset=utf-8' -TimeoutSec 600
@@ -104,7 +105,9 @@ foreach($ctx in $contexts){
     $response | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $rawPath -Encoding utf8
     [pscustomobject]@{reason=$reasonTokens;content=$contentTokens;combined=$combinedTokens} | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath (Join-Path $out "$id.tokens.json") -Encoding utf8
     $tim=$response.timings
-    $records.Add([pscustomobject]@{id=$id;context=$ctx;kv=$c.id;mtp=$c.mtp;rep=$rep;finish=$response.choices[0].finish_reason;reason_tokens=$reasonTokens.Count;content_tokens=$contentTokens.Count;total_tokens=$combinedTokens.Count;predicted_n=$tim.predicted_n;draft_n=$tim.draft_n;draft_accepted=$tim.draft_n_accepted;predicted_tps=$tim.predicted_per_second;status='OK'})
+    $dn=if($tim.PSObject.Properties.Name -contains 'draft_n'){$tim.draft_n}else{0}
+    $da=if($tim.PSObject.Properties.Name -contains 'draft_n_accepted'){$tim.draft_n_accepted}else{0}
+    $records.Add([pscustomobject]@{id=$id;context=$ctx;kv=$c.id;mtp=$c.mtp;rep=$rep;finish=$response.choices[0].finish_reason;reason_tokens=@($reasonTokens).Count;content_tokens=@($contentTokens).Count;total_tokens=@($combinedTokens).Count;predicted_n=$tim.predicted_n;draft_n=$dn;draft_accepted=$da;predicted_tps=$tim.predicted_per_second;status='OK'})
    }catch{
     $records.Add([pscustomobject]@{id=$id;context=$ctx;kv=$c.id;mtp=$c.mtp;rep=$rep;status='ERROR';error=$_.Exception.Message})
     Write-Warning "$id : $($_.Exception.Message)"
