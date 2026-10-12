@@ -86,7 +86,7 @@ def main():
         if row.get("status") != "OK":
             errors.append(f"run status={row.get('status')}")
         if emitted and len(emitted) != int(row.get("predicted_n") or 0):
-            errors.append(f"emitted count differs: trace={len(emitted)} API={row.get(\'predicted_n\')}")
+            errors.append(f"emitted count differs: trace={len(emitted)} API={row.get('predicted_n')}")
         samples.append({"id":stem, "events":events, "emitted":emitted, "errors":errors,
                         "draft_n":got_draft, "draft_accepted":got_accept})
     pairs = []
