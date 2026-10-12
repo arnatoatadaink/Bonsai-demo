@@ -1,0 +1,5 @@
+﻿"context","repeat","a","b","first_diff_zero_based","common_prefix_tokens","a_tokens","b_tokens","limitation"
+"32768","1","32768_q4q4_off_r1","32768_q4q4_on_r1","75","75","1024","1024","post-hoc rendered text re-tokenization"
+"32768","1","32768_q8q4_off_r1","32768_q8q4_on_r1","118","118","1024","1024","post-hoc rendered text re-tokenization"
+"32768","1","32768_q4q4_off_r1","32768_q8q4_off_r1","87","87","1024","1024","post-hoc rendered text re-tokenization"
+"32768","1","32768_q4q4_on_r1","32768_q8q4_on_r1","75","75","1024","1024","post-hoc rendered text re-tokenization"

@@ -1,0 +1,5 @@
+﻿"id","context","kv","mtp","rep","finish","reason_tokens","content_tokens","total_tokens","predicted_n","draft_n","draft_accepted","predicted_tps","status"
+"32768_q4q4_off_r1","32768","q4q4_off","False","1","length","1024","0","1024","1024","0","0","30.02399982954116","OK"
+"32768_q4q4_on_r1","32768","q4q4_on","True","1","length","1024","0","1024","1024","1009","517","39.67442153588102","OK"
+"32768_q8q4_off_r1","32768","q8q4_off","False","1","length","1024","0","1024","1024","0","0","30.32952360323279","OK"
+"32768_q8q4_on_r1","32768","q8q4_on","True","1","length","1024","0","1024","1024","1011","516","39.22729664605847","OK"
