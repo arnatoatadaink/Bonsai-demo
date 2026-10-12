@@ -85,7 +85,7 @@ def main():
             errors.append(f"count mismatch API={expected_draft}/{expected_accept} trace={got_draft}/{got_accept}")
         if row.get("status") != "OK":
             errors.append(f"run status={row.get('status')}")
-        if emitted and len(emitted) != int(row.get("predicted_n") or 0):
+        if len(emitted) != int(row.get("predicted_n") or 0):
             errors.append(f"emitted count differs: trace={len(emitted)} API={row.get('predicted_n')}")
         samples.append({"id":stem, "events":events, "emitted":emitted, "errors":errors,
                         "draft_n":got_draft, "draft_accepted":got_accept})
