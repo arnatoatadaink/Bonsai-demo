@@ -1,0 +1,12 @@
+﻿{
+    "mode":  "full",
+    "repeats":  3,
+    "contexts":  32768,
+    "seed":  42,
+    "max_tokens":  1024,
+    "port":  18080,
+    "prompt_sha256":  "deadb287878220fe0b652b43371866b2a66ff9cca91167cfdb3b9c25b590d145",
+    "server_sha256":  "1BF104B2C3274899EF20BA92AFFDBBDAFB6CFD0903621C2492E702A284D16FEE",
+    "model_sha256":  "3CB3F0056D2E34EE44245A64396004A21F8492573D6CE1266EC4B7222C131DD4",
+    "note":  "tokenization is post-hoc re-tokenization of visible API fields, not internal raw token IDs"
+}
