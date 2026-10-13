@@ -13,7 +13,7 @@ Run `prepare.bat` once (requires Windows `py -3` and Python standard library). I
 - Existing Gemma4 server: localhost:8081 => run-gemma.bat
 - Servers are **never started/stopped/reconfigured** by this suite.
 - Requires both models to use effective Think OFF; the request also asks for none and enable_thinking=false.
-- Each run independently preflights /tokenize, refuses prompt >= 60000 estimated tokens, and caps generation at 2048 tokens.
+- Each run avoids the full /tokenize API because it may block. It checks input characters (80,000 maximum, an imperfect proxy), requests at most 2048 output tokens, and records actual prompt token counts from successful responses. Character count alone does not guarantee 64k context fit.
 - Keep same dataset/prompt.txt between models. Both result summaries record the SHA256.
 - If either server is unavailable, execute only the available model later; no server must be stopped for preparation.
 - A dedicated 64k context is required. The 60000-token ceiling is conservative but does not guarantee fit if chat-template overhead is extreme.
@@ -39,3 +39,7 @@ Each run writes results/{model}_{timestamp}/:
 - Re-run with harder distractors and 32k/50k token targets if this screening test yields a ceiling effect.
 
 **Nothing in this suite has been executed on the user's Windows machines.**
+
+## v0.1.2: preflight hang workaround
+
+The 2026-10-14 Windows run stalled at full-prompt /tokenize with no visible GPU activity. That endpoint is no longer called. The runner now displays character count and proceeds to inference. Actual input tokens are available in summary.json after success. A future proper tokenizer-only preflight should be implemented separately; this is not a true token cap.
