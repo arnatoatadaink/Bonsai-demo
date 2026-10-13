@@ -62,7 +62,8 @@ try {
     if (-not $Ready) { throw 'Server health timeout.' }
     Save-Json (Invoke-RestMethod -Uri ($Base + '/v1/models') -TimeoutSec 10) (Join-Path $RunDir 'models.json')
 
-    $Questions = @(Get-Content (Join-Path $Root 'questions.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
+    $Questions = ConvertFrom-Json -InputObject (Get-Content (Join-Path $Root 'questions.json') -Raw -Encoding UTF8)
+    if (@($Questions).Count -ne 3) { throw ('Expected 3 questions, found ' + @($Questions).Count) }
     foreach ($Question in $Questions) {
         foreach ($Mode in @('default','off','on')) {
             $Body = @{
@@ -73,7 +74,7 @@ try {
                 $Body['reasoning_effort']='none'
                 $Body['chat_template_kwargs']=@{enable_thinking=$false}
             } elseif ($Mode -eq 'on') {
-                $Body['reasoning_effort']='high'
+                $Body['reasoning_effort']='medium'
                 $Body['chat_template_kwargs']=@{enable_thinking=$true}
             }
             $Prefix = [string]$Question.id + '_' + $Mode
@@ -107,6 +108,15 @@ try {
                     elapsed_sec=[Math]::Round($Watch.Elapsed.TotalSeconds,3);error=$_.Exception.Message
                 }
                 Write-Warning $Row.error
+                if ($_.Exception.Response) {
+                    try {
+                        $Stream = $_.Exception.Response.GetResponseStream()
+                        $Reader = New-Object System.IO.StreamReader($Stream)
+                        $ErrorBody = $Reader.ReadToEnd()
+                        $Reader.Dispose()
+                        $ErrorBody | Out-File (Join-Path $RunDir ($Prefix + '.error.txt')) -Encoding UTF8
+                    } catch {}
+                }
             }
             $Rows.Add($Row)
             $Rows | Export-Csv (Join-Path $RunDir 'trials.csv') -NoTypeInformation -Encoding UTF8
