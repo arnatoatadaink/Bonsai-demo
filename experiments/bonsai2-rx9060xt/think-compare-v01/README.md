@@ -15,8 +15,12 @@ Default GPU: Vulkan0; context 98304; K q8_0 / V q4_0; MTP explicitly disabled; f
 
 Each run saves environment.json (binary SHA256 and model path), models.json, trials.csv, per-case request/response JSON, response texts, server stdout/stderr, and errors. Questions run in the order Default, OFF, ON. Empty reasoning_content does not prove absence of model-internal reasoning. ON/OFF effectiveness requires evidence; identical outputs are inconclusive.
 
-The benchmark requests reasoning_effort none/high together with chat_template_kwargs.enable_thinking false/true. These are test requests, not verified supported Bonsai2 settings. The model's low reasoning effort is documented as unsupported.
+The benchmark requests reasoning_effort none/medium together with chat_template_kwargs.enable_thinking false/true. These are test requests, not verified supported Bonsai2 settings. The model's low reasoning effort is documented as unsupported.
 
 ## Limitations
 
 No automatic semantic quality grading. Fixed temperature=0 and seed=42 isolate the switches, not production decoding defaults. This does not run Vulkan kernel optimization or MTP comparisons. Requires Windows PowerShell 5.1+, local binary/model, and a free port 18087. Existing foreign processes are never terminated.
+
+## v0.1.1 correction (2026-10-14)
+
+The first Windows run treated the questions array as a single value under Windows PowerShell 5.1. The runner now parses the JSON array directly and requires exactly three questions, resulting in nine trials. The ON request now uses medium rather than high reasoning effort; HTTP failures preserve their response body as a per-case .error.txt file. Prior run_20261014_045953 contained only three combined trials and must not be used for per-question quality comparison.
