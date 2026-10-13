@@ -10,7 +10,8 @@ param(
  [int]$Seed=42,
  [int]$LoadTimeoutSec=180,
  [switch]$Include64K,
- [switch]$TraceQ8Q4
+ [switch]$TraceQ8Q4,
+ [int]$TraceRepeats=3
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -24,11 +25,13 @@ if(!(Test-Path -LiteralPath $Server)){throw "Server not found: $Server"}
 if(!(Test-Path -LiteralPath $Model)){throw "Model not found: $Model"}
 if($MaxTokens -lt 32){throw 'MaxTokens must be >= 32'}
 if($Context -notin @(32768,65536)){throw 'Context must be 32768 or 65536'}
+if($TraceRepeats -lt 1 -or $TraceRepeats -gt 100){throw 'TraceRepeats must be 1..100'}
+if(!$TraceQ8Q4 -and $TraceRepeats -ne 3){throw 'TraceRepeats requires TraceQ8Q4'}
 if($TraceQ8Q4 -and $Include64K){throw 'TraceQ8Q4 and Include64K cannot be combined'}
 if($TraceQ8Q4 -and $Context -ne 32768){throw 'TraceQ8Q4 requires Context=32768'}
 if($TraceQ8Q4 -and $Mode -ne 'full'){throw 'TraceQ8Q4 requires Mode=full'}
 if($Include64K -and $Mode -eq 'smoke'){throw '64K only in full mode'}
-$reps=if($Mode -eq 'smoke'){1}else{3}
+$reps=if($TraceQ8Q4){$TraceRepeats}elseif($Mode -eq 'smoke'){1}else{3}
 $contexts=if($Include64K){@(32768,65536)}else{@($Context)}
 $prompt=if($PromptFile){Get-Content -LiteralPath $PromptFile -Raw -Encoding UTF8}else{
   "Review an access-control change: an API uses user.isSuspended, but one proposed patch checks isSuspended without a receiver. Analyze likely failure modes, list at least three tests, and propose a minimal safe fix. Explicitly distinguish confirmed facts from assumptions."
