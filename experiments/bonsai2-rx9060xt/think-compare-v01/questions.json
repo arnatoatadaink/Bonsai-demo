@@ -1,0 +1,17 @@
+[
+  {
+    "id": "Q01_summary",
+    "kind": "summary",
+    "prompt": "Summarize the following financial facts in Japanese. Preserve every numeric detail and distinguish reported facts from hypotheses. Sales rose 12% year over year. Operating profit fell 8%. Capital investment rose 20%. Personnel costs rose 10%. Debt and cash flow were not disclosed."
+  },
+  {
+    "id": "Q02_logic",
+    "kind": "reasoning",
+    "prompt": "Three tasks A, B and C must finish. A takes 4 days. B takes 7 days and can start only after A. C takes 6 days and can start immediately in parallel with A. A final task D takes 3 days and requires both B and C. What is the earliest day D finishes? Show a clear critical path and final number."
+  },
+  {
+    "id": "Q03_security",
+    "kind": "review",
+    "prompt": "Review this pseudocode for an authorization vulnerability. Explain the vulnerability and a safer design: GET /api/orders/{id}: if authenticated(user): return database.orders.get(id). State the security invariants and two test cases."
+  }
+]
