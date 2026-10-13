@@ -47,7 +47,7 @@ try {
 
     $Parsed=@{}
     foreach ($Line in ($Answer -split "\r?\n")) {
-        if ($Line -match '^\s*\*{0,2}(F\d\d)\*{0,2}\s*[:\x{FF1A}]\s*(.+?)\s*$') {
+        if ($Line -match '^\s*\*{0,2}(F\d\d)\*{0,2}\s*[:\uFF1A]\s*(.+?)\s*$') {
             $Parsed[$matches[1]]=$matches[2].Trim().TrimEnd('.',' ','*')
         }
     }
