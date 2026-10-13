@@ -18,16 +18,23 @@ try {
     $PromptPath=Join-Path $DataDir 'prompt.txt'
     $GoldPath=Join-Path $DataDir 'gold.json'
     if (-not (Test-Path $PromptPath)) { throw 'Missing dataset. Execute prepare.bat first.' }
+    Write-Host "[1/5] Loading dataset for $Model" -ForegroundColor Cyan
     $Prompt=Get-Content -LiteralPath $PromptPath -Raw -Encoding UTF8
+    Write-Host ("Dataset characters: " + $Prompt.Length)
     $Gold=Get-Content -LiteralPath $GoldPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Write-Host "[2/5] Checking existing server $Base" -ForegroundColor Cyan
     $Health=Invoke-RestMethod ($Base+'/health') -TimeoutSec 10
     if ($Health.status -ne 'ok') { throw 'Server is not ready.' }
     $Models=Invoke-RestMethod ($Base+'/v1/models') -TimeoutSec 10
     $Models | ConvertTo-Json -Depth 20 | Out-File (Join-Path $RunDir 'models.json') -Encoding UTF8
 
     # Tokenization preflight is approximate: chat-template overhead is additional.
+    Write-Host '[3/5] Tokenizing the full prompt (server CPU/GPU may be busy; this step can take time)' -ForegroundColor Cyan
+    $TokenWatch=[Diagnostics.Stopwatch]::StartNew()
     $Tokens=Post-Json '/tokenize' @{content=$Prompt;add_special=$false}
+    $TokenWatch.Stop()
     $TokenCount=@($Tokens.tokens).Count
+    Write-Host ("Token count: $TokenCount; preflight seconds: " + [math]::Round($TokenWatch.Elapsed.TotalSeconds,1))
     if ($TokenCount -ge 60000) {
         throw "Prompt estimated at $TokenCount tokens. Must be under 60000 for safe 64k use. Lower --target-chars and regenerate."
     }
@@ -38,6 +45,7 @@ try {
         chat_template_kwargs=@{enable_thinking=$false}
     }
     $Body | ConvertTo-Json -Depth 20 | Out-File (Join-Path $RunDir 'request.json') -Encoding UTF8
+    Write-Host "[4/5] Requesting full answer from $Model; no streaming (console stays idle until response)" -ForegroundColor Cyan
     $Watch=[Diagnostics.Stopwatch]::StartNew()
     $R=Post-Json '/v1/chat/completions' $Body
     $Watch.Stop()
@@ -51,6 +59,7 @@ try {
             $Parsed[$matches[1]]=$matches[2].Trim().TrimEnd('.',' ','*')
         }
     }
+    Write-Host '[5/5] Scoring and saving answer' -ForegroundColor Cyan
     $Rows=@(foreach($Fact in $Gold) {
         $Value=if($Parsed.ContainsKey($Fact.id)){$Parsed[$Fact.id]}else{''}
         $Expected=[string]$Fact.expected
@@ -81,6 +90,6 @@ try {
     if ($R.usage.prompt_tokens -ge 63488) { Write-Warning 'Prompt close to server context boundary.' }
 } catch {
     $_ | Out-String | Out-File (Join-Path $RunDir 'failure.txt') -Encoding UTF8
-    Write-Error $_.Exception.Message
+    Write-Warning $_.Exception.Message
     exit 1
 }
