@@ -24,3 +24,16 @@ No automatic semantic quality grading. Fixed temperature=0 and seed=42 isolate t
 ## v0.1.1 correction (2026-10-14)
 
 The first Windows run treated the questions array as a single value under Windows PowerShell 5.1. The runner now parses the JSON array directly and requires exactly three questions, resulting in nine trials. The ON request now uses medium rather than high reasoning effort; HTTP failures preserve their response body as a per-case .error.txt file. Prior run_20261014_045953 contained only three combined trials and must not be used for per-question quality comparison.
+
+## Faithfulness suite (v0.2)
+
+Run run-long.bat to execute 5 evidence-retention scenarios x 3 modes (15 requests). The server is launched and stopped using the same dedicated child-PID logic. The question source is questions-long.json and output includes suite.json to identify it. The scenarios cover:
+- exact financial numbers and periods
+- negated approvals vs draft claims
+- region- and date-specific exceptions
+- mutually contradictory source figures
+- forecast revisions vs actual shipment
+
+This is a controlled moderate-length screening suite (repeated neutral background, not a 90k context test); it deliberately has no automatic LLM-as-judge. Use expected_checks fields in questions-long.json to manually assess evidence retention, unsupported assertions, contradiction handling and omissions. Do not score output based only on reasoning_content length.
+
+Run.ps1 accepts -QuestionsFile questions.json (default) or -QuestionsFile questions-long.json. Original run.bat remains unchanged. The 96k allocation, K Q8_0 / V Q4_0, MTP OFF and Vulkan0 settings remain fixed.
