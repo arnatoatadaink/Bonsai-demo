@@ -28,16 +28,16 @@ try {
     $Models=Invoke-RestMethod ($Base+'/v1/models') -TimeoutSec 10
     $Models | ConvertTo-Json -Depth 20 | Out-File (Join-Path $RunDir 'models.json') -Encoding UTF8
 
-    # Tokenization preflight is approximate: chat-template overhead is additional.
-    Write-Host '[3/5] Tokenizing the full prompt (server CPU/GPU may be busy; this step can take time)' -ForegroundColor Cyan
-    $TokenWatch=[Diagnostics.Stopwatch]::StartNew()
-    $Tokens=Post-Json '/tokenize' @{content=$Prompt;add_special=$false}
-    $TokenWatch.Stop()
-    $TokenCount=@($Tokens.tokens).Count
-    Write-Host ("Token count: $TokenCount; preflight seconds: " + [math]::Round($TokenWatch.Elapsed.TotalSeconds,1))
-    if ($TokenCount -ge 60000) {
-        throw "Prompt estimated at $TokenCount tokens. Must be under 60000 for safe 64k use. Lower --target-chars and regenerate."
+    # The full /tokenize request may stall on this runtime. Do not invoke it.
+    # Character count is only a conservative guard; actual prompt tokens are
+    # recorded from API usage after generation.
+    Write-Host '[3/5] Preflight: checking character count (no /tokenize request)' -ForegroundColor Cyan
+    $PromptChars=$Prompt.Length
+    if ($PromptChars -gt 80000) {
+        throw "Prompt has $PromptChars characters; exceeds the conservative 80000-character guard. Regenerate a smaller dataset."
     }
+    $TokenCount=$null
+    Write-Host ("Prompt characters: " + $PromptChars + "; tokenizer length not measured")
     $Body=@{
         messages=@(@{role='user';content=$Prompt})
         max_tokens=2048;temperature=0;top_k=1;seed=42
@@ -73,7 +73,7 @@ try {
     $Rows | Export-Csv (Join-Path $RunDir 'fact_checks.csv') -NoTypeInformation -Encoding UTF8
     $Summary=[ordered]@{
         model=$Model;endpoint=$Base;dataset_sha256=(Get-FileHash $PromptPath -Algorithm SHA256).Hash
-        tokenizer_estimate=$TokenCount;actual_prompt_tokens=$R.usage.prompt_tokens
+        tokenizer_estimate=$TokenCount;prompt_characters=$PromptChars;actual_prompt_tokens=$R.usage.prompt_tokens
         generated_tokens=$R.usage.completion_tokens
         stop=$R.choices[0].finish_reason
         elapsed_seconds=[math]::Round($Watch.Elapsed.TotalSeconds,2)
