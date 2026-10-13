@@ -13,6 +13,7 @@ from pathlib import Path
 
 PROPOSE = re.compile(r"MTP_TRACE proposal: n_past=(\d+) sampled_anchor=(-?\d+) proposed_ids=\[([^\]]*)\]")
 EMITTED = re.compile(r"MTP_TRACE emitted: id=(-?\d+)")
+TOP2 = re.compile(r"MTP_TRACE target_top2: phase=(\\w+) ordinal=(\\d+) batch_idx=(-?\\d+) id1=(-?\\d+) logit1=([^ ]+) id2=(-?\\d+) logit2=([^ ]+) margin=([^ ]+)")
 VERIFY = re.compile(r"MTP_TRACE verification: proposed=(\d+) accepted_prefix=(\d+) confirmed_ids=\[([^\]]*)\]")
 
 def ints(value):
@@ -21,12 +22,17 @@ def ints(value):
 def read_run(root, stem):
     events = []
     emitted = []
+    top2 = []
     direct = root / (stem + ".trace.log")
     extensions = ("trace.log",) if direct.exists() else ("stderr.log", "stdout.log")
     for extension in extensions:
         log = root / (stem + "." + extension)
         if log.exists():
             for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+                m2 = TOP2.search(line)
+                if m2:
+                    top2.append({"phase":m2[1], "ordinal":int(m2[2]), "idx":int(m2[3]), "id1":int(m2[4]),
+                                 "logit1":float(m2[5]), "id2":int(m2[6]), "logit2":float(m2[7]), "margin":float(m2[8])})
                 e = EMITTED.search(line)
                 if e:
                     emitted.append(int(e[1]))
@@ -59,7 +65,7 @@ def read_run(root, stem):
             pending = None
     if pending is not None:
         errors.append("unpaired trailing proposal")
-    return pairs, emitted, errors
+    return pairs, emitted, top2, errors
 
 def first_difference(a, b):
     for i, (x, y) in enumerate(zip(a, b)):
@@ -76,7 +82,7 @@ def main():
     samples = []
     for row in rows:
         stem = row["id"]
-        events, emitted, errors = read_run(root, stem)
+        events, emitted, top2, errors = read_run(root, stem)
         expected_draft = int(row.get("draft_n") or 0)
         expected_accept = int(row.get("draft_accepted") or 0)
         got_draft = sum(len(x["proposal"]) for x in events)
@@ -87,7 +93,7 @@ def main():
             errors.append(f"run status={row.get('status')}")
         if len(emitted) != int(row.get("predicted_n") or 0):
             errors.append(f"emitted count differs: trace={len(emitted)} API={row.get('predicted_n')}")
-        samples.append({"id":stem, "events":events, "emitted":emitted, "errors":errors,
+        samples.append({"id":stem, "events":events, "emitted":emitted, "top2":top2, "errors":errors,
                         "draft_n":got_draft, "draft_accepted":got_accept})
     pairs = []
     for i, a in enumerate(samples):
@@ -97,7 +103,9 @@ def main():
             # checkpoints and previous anchors can make that misleading.
             reason = "identical" if idx == -1 else ("different event" if idx < min(len(a["events"]),len(b["events"])) else "different length")
             tok_diff = first_difference(a["emitted"], b["emitted"]) if a["emitted"] and b["emitted"] else None
-            pairs.append({"a":a["id"], "b":b["id"], "first_different_emitted_token_zero_based":tok_diff,
+            top2_diff = first_difference(a["top2"], b["top2"]) if a["top2"] and b["top2"] else None
+            pairs.append({"a":a["id"], "b":b["id"], "first_different_target_top2_sample_zero_based":top2_diff,
+                          "a_top2_samples":len(a["top2"]), "b_top2_samples":len(b["top2"]), "first_different_emitted_token_zero_based":tok_diff,
                           "a_emitted_tokens":len(a["emitted"]), "b_emitted_tokens":len(b["emitted"]),
                           "first_different_verification_round_zero_based":idx,
                           "a_rounds":len(a["events"]), "b_rounds":len(b["events"]),
@@ -106,9 +114,9 @@ def main():
         w = csv.DictWriter(f,fieldnames=list(pairs[0]) if pairs else ["a","b"])
         w.writeheader()
         w.writerows(pairs)
-    summary = {"runs":[{k:v for k,v in x.items() if k not in ("events", "emitted")}|{"rounds":len(x["events"]), "emitted_tokens":len(x["emitted"])} for x in samples],
+    summary = {"runs":[{k:v for k,v in x.items() if k not in ("events", "emitted", "top2")}|{"rounds":len(x["events"]), "emitted_tokens":len(x["emitted"]), "top2_samples":len(x["top2"])} for x in samples],
                "comparisons":pairs,
-               "caveat":"Trace includes emitted token IDs from the speculative output path, not target logits. Compare API predicted_n count and verify no truncation."}
+               "caveat":"Raw pre-sampler target top2 values are diagnostic (not post-sampler probabilities), can differ across rounds after token divergence. Compare same-prefix positions only; verification includes unused later logits after early rejection."}
     (root/"mtp-trace-comparison.json").write_text(json.dumps(summary,indent=2,ensure_ascii=False),encoding="utf-8")
     print(json.dumps(summary,indent=2,ensure_ascii=False))
     return int(any(x["errors"] for x in samples))
