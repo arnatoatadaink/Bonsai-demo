@@ -41,7 +41,7 @@ FILL = [
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--output",default="dataset")
-    p.add_argument("--target-chars",type=int,default=128000)
+    p.add_argument("--target-chars",type=int,default=65000)
     a = p.parse_args()
     out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
     rnd=random.Random(20261014)
