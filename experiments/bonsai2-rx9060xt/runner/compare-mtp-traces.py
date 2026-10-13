@@ -13,7 +13,7 @@ from pathlib import Path
 
 PROPOSE = re.compile(r"MTP_TRACE proposal: n_past=(\d+) sampled_anchor=(-?\d+) proposed_ids=\[([^\]]*)\]")
 EMITTED = re.compile(r"MTP_TRACE emitted: id=(-?\d+)")
-TOP2 = re.compile(r"MTP_TRACE target_top2: phase=(\\w+) ordinal=(\\d+) batch_idx=(-?\\d+) id1=(-?\\d+) logit1=([^ ]+) id2=(-?\\d+) logit2=([^ ]+) margin=([^ ]+)")
+TOP2 = re.compile(r"MTP_TRACE target_top2: phase=(\w+) ordinal=(\d+) batch_idx=(-?\d+) id1=(-?\d+) logit1=([^ ]+) id2=(-?\d+) logit2=([^ ]+) margin=([^ ]+)")
 VERIFY = re.compile(r"MTP_TRACE verification: proposed=(\d+) accepted_prefix=(\d+) confirmed_ids=\[([^\]]*)\]")
 
 def ints(value):
