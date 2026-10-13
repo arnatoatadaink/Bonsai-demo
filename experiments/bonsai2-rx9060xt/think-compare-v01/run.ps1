@@ -1,3 +1,4 @@
+param([string]$QuestionsFile = 'questions.json')
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Cfg = Get-Content (Join-Path $Root 'config.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -62,8 +63,12 @@ try {
     if (-not $Ready) { throw 'Server health timeout.' }
     Save-Json (Invoke-RestMethod -Uri ($Base + '/v1/models') -TimeoutSec 10) (Join-Path $RunDir 'models.json')
 
-    $Questions = ConvertFrom-Json -InputObject (Get-Content (Join-Path $Root 'questions.json') -Raw -Encoding UTF8)
-    if (@($Questions).Count -ne 3) { throw ('Expected 3 questions, found ' + @($Questions).Count) }
+    $QuestionPath = Join-Path $Root $QuestionsFile
+    if (-not (Test-Path -LiteralPath $QuestionPath -PathType Leaf)) { throw "Questions file missing: $QuestionPath" }
+    $Questions = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $QuestionPath -Raw -Encoding UTF8)
+    $QuestionCount = @($Questions).Count
+    if ($QuestionCount -lt 1) { throw 'No questions found.' }
+    Save-Json ([ordered]@{questions_file=$QuestionsFile;questions_count=$QuestionCount;modes=@('default','off','on')}) (Join-Path $RunDir 'suite.json')
     foreach ($Question in $Questions) {
         foreach ($Mode in @('default','off','on')) {
             $Body = @{
