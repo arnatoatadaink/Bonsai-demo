@@ -1,0 +1,15 @@
+{
+  "server": "D:\\AI\\PrismML\\dev\\llama.cpp\\build-vulkan-ucrt64\\bin\\llama-server.exe",
+  "model": "D:\\AI\\PrismML\\MTP-experiment\\models\\Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf",
+  "port": 18087,
+  "context": 98304,
+  "cache_k": "q8_0",
+  "cache_v": "q4_0",
+  "threads": 4,
+  "batch": 1024,
+  "ubatch": 512,
+  "max_tokens": 2048,
+  "startup_timeout_sec": 240,
+  "request_timeout_sec": 1200,
+  "hash_model": false
+}
