@@ -1,4 +1,4 @@
-import argparse,csv,json,re,time,hashlib,urllib.request,urllib.error
+import argparse,csv,json,re,time,hashlib,urllib.request,urllib.error,random
 from pathlib import Path
 from datetime import datetime
 def call(url,body=None,timeout=10):
@@ -8,19 +8,23 @@ def call(url,body=None,timeout=10):
   with urllib.request.urlopen(req,timeout=timeout) as f:return json.loads(f.read().decode('utf-8'))
  except urllib.error.HTTPError as e:raise RuntimeError(f'HTTP {e.code}: {e.read(2000).decode("utf-8","replace")}') from e
 def main():
- p=argparse.ArgumentParser();p.add_argument('--model',choices=['bonsai','gemma'],required=True);p.add_argument('--timeout',type=int,default=1200);a=p.parse_args()
- root=Path(__file__).resolve().parent;d=root/'dataset';out=root/'results'/(a.model+'_'+datetime.now().strftime('%Y%m%d_%H%M%S'));out.mkdir(parents=True)
+ p=argparse.ArgumentParser();p.add_argument('--model',choices=['bonsai','gemma'],required=True);p.add_argument('--timeout',type=int,default=1200);p.add_argument('--data-dir',default='dataset');p.add_argument('--question-seed',type=int,default=None);a=p.parse_args()
+ root=Path(__file__).resolve().parent;d=Path(a.data_dir);d=d if d.is_absolute() else root/d;out=root/'results'/(a.model+'_'+d.name+'_'+datetime.now().strftime('%Y%m%d_%H%M%S'));out.mkdir(parents=True)
  base='http://127.0.0.1:'+('8078' if a.model=='bonsai' else '8081')
  try:
   doc=(d/'source.txt').read_text(encoding='utf-8');gold=json.loads((d/'gold.json').read_text(encoding='utf-8'))
-  print(f'Dataset: {len(doc)} chars, {len(gold)} cases; SHA256 {hashlib.sha256(doc.encode()).hexdigest()}',flush=True)
+  checksum=hashlib.sha256(doc.encode()).hexdigest()
+  (out/'run_manifest.json').write_text(json.dumps({'model':a.model,'dataset':str(d),'source_sha256':checksum,'question_seed':a.question_seed,'question_order_by_group':{}},indent=2),encoding='utf-8')
+  print(f'Dataset: {len(doc)} chars, {len(gold)} cases; SHA256 {checksum}',flush=True)
   if len(doc)>180000:raise RuntimeError('Corpus exceeds conservative size guard')
   print('Health:',call(base+'/health',timeout=10),flush=True)
   (out/'models.json').write_text(json.dumps(call(base+'/v1/models'),indent=2),encoding='utf-8')
   rows=[];metrics=[]
   for group in ['G1','G2','G3','G4','G5']:
    subset=[x for x in gold if x['group']==group]
+   if a.question_seed is not None:random.Random(a.question_seed+int(group[1:])).shuffle(subset)
    qs='\n'.join(x['id']+': ROOT='+x['root'] for x in subset)
+   manifest=json.loads((out/'run_manifest.json').read_text(encoding='utf-8'));manifest['question_order_by_group'][group]=[x['id'] for x in subset];(out/'run_manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
    prompt='Use the mapping archive below. For each requested root, repeatedly follow the latest VERSION for each KEY until a terminal VALUE-XXXXXXXXXXXX is reached. Report each final value plus all supporting active record IDs in order. Avoid stale versions. Output one line each: G1_01: VALUE-XXXXXXXXXXXX | G1_01_H1,G1_01_H2. No extra prose.\nARCHIVE:\n'+doc+'\nQUESTIONS:\n'+qs
    body={'messages':[{'role':'user','content':prompt}],'max_tokens':2048,'temperature':0,'top_k':1,'seed':42,'reasoning_effort':'none','chat_template_kwargs':{'enable_thinking':False}}
    (out/(group+'.request.json')).write_text(json.dumps(body,ensure_ascii=False),encoding='utf-8')
