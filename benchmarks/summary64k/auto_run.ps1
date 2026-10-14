@@ -3,7 +3,7 @@ param(
  [ValidateSet('all','bonsai8','gemma12','qwen9')][string]$Model='all',
  [string]$Levels='1,2,3,4,5',
  [string]$Device='',
- [string]$OutputRoot='summary-benchmark-results',
+ [string]$OutputRoot='',
  [int]$Port=18080,
  [int]$StartupTimeoutSeconds=240,
  [switch]$SmokeOnly,
@@ -12,8 +12,13 @@ param(
 $ErrorActionPreference='Stop'
 if (!(Test-Path -LiteralPath $LlamaServer -PathType Leaf)) {throw "Executable not found: $LlamaServer"}
 $LlamaServer=(Resolve-Path -LiteralPath $LlamaServer).Path
-$root=Join-Path (Get-Location).Path $OutputRoot
-New-Item -ItemType Directory -Force $root | Out-Null
+$suiteRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$resultsRoot = if ($OutputRoot) { [IO.Path]::GetFullPath($OutputRoot) } else { Join-Path $suiteRoot 'results' }
+New-Item -ItemType Directory -Force -Path $resultsRoot | Out-Null
+$runStamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+$root = Join-Path $resultsRoot ("run_" + $runStamp)
+if (Test-Path -LiteralPath $root) { throw "Run directory already exists: $root" }
+New-Item -ItemType Directory -Path $root | Out-Null
 $models=@{
  bonsai8='D:\lmstudio_models\prism-ml\Ternary-Bonsai-8B-gguf\Ternary-Bonsai-8B-PQ2_0.gguf'
  gemma12='D:\lmstudio_models\unsloth\gemma-4-12b-it-GGUF\gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'
@@ -45,8 +50,10 @@ $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $roo
 foreach ($name in $selected) {
  $file=$models[$name]
  if (!(Test-Path -LiteralPath $file -PathType Leaf)) {throw "GGUF missing: $file"}
- $stdout=Join-Path $root "$name.stdout.log"
- $stderr=Join-Path $root "$name.stderr.log"
+ $modelDir=Join-Path $root $name
+ New-Item -ItemType Directory -Force -Path $modelDir | Out-Null
+ $stdout=Join-Path $modelDir 'server.stdout.log'
+ $stderr=Join-Path $modelDir 'server.stderr.log'
  $launch=@('-m',$file,'--host','127.0.0.1','--port',"$Port",'--device',$Device,
  '-ngl','99','-sm','none','-c','65536','--cache-type-k','q8_0','--cache-type-v','q8_0',
  '-fa','on','-np','1','--jinja')
@@ -65,9 +72,9 @@ foreach ($name in $selected) {
   if (!$ready) {throw "Server startup timeout; see $stderr"}
   $lv=if ($SmokeOnly) {'1'} else {$Levels}
   if ($OriginalSuite) {
-   & python benchmarks/summary64k/run_original_suite.py --model $name --suite both --base-url "http://127.0.0.1:$Port" --output (Join-Path $root 'original-suite') $(if ($SmokeOnly) {'--smoke'})
+   & python benchmarks/summary64k/run_original_suite.py --model $name --suite both --base-url "http://127.0.0.1:$Port" --output (Join-Path $modelDir 'original-suite') --flat-output $(if ($SmokeOnly) {'--smoke'})
   } else {
-   & python benchmarks/summary64k/run.py --model $name --levels $lv --base-url "http://127.0.0.1:$Port" --output $root --acknowledge-server-settings
+   & python benchmarks/summary64k/run.py --model $name --levels $lv --base-url "http://127.0.0.1:$Port" --output $modelDir --acknowledge-server-settings
   }
   if ($LASTEXITCODE -ne 0) {throw "Benchmark failed: $name"}
  } finally {
