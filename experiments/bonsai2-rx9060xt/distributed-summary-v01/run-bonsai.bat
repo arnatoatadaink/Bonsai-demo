@@ -1,7 +1,9 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-existing.ps1" -Model bonsai
+py -3 "%~dp0run-existing.py" --model bonsai
 set "RC=%ERRORLEVEL%"
+echo.
+echo Benchmark exit code: %RC%
 pause
 exit /b %RC%
