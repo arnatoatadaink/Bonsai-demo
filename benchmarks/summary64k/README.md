@@ -143,3 +143,27 @@ This follows the project's prior `distributed-summary-v01` and `MTP-01` approach
 **Limitations of this first automation:** It checks declared CLI options, GPU device listing, model file existence, HTTP readiness and request completion, but cannot prove that the runtime actually retained 65536 context, q8/q8 allocation, full GPU offload, or valid ON/OFF thinking. Those conditions require inspection of saved runtime logs and output. Passing `--acknowledge-server-settings` is an automation bypass of the runner's human confirmation gate, **not a successful configuration audit**. Synthetic fixture input size is approximate and quality remains unscored.
 
 If backend startup fails, check `*.stderr.log` for unsupported flags, memory fit or PQ2_0 compatibility. Do not silently reduce context or KV precision to get a passing result.
+
+
+## Historical 27B vs new-model apples-to-apples prompt replay
+
+Original test source: Git branch `bench/bonsai2-think-compare-v01`, directory `experiments/bonsai2-rx9060xt/think-compare-v01/`. Replay loads the **exact committed** `questions.json` (3 short questions: summary, logic, security) and `questions-long.json` (long-form suite) through `git show`. Prompts are not regenerated. The original harness used `default/off/on` requests with `temperature=0`, `top_k=1`, `seed=42` and 2048 output tokens. This replay keeps those settings for Bonsai8 and Qwen9; Gemma12 runs default only. It stores raw requests/responses, trial-level timing and manifest. It does not change the original committed test sources.
+
+```powershell
+git fetch origin bench/bonsai2-think-compare-v01
+git switch bench/summary-rx9070xt-64k-20261015
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+# PowerShell execution policy is local-session only; or invoke powershell.exe -ExecutionPolicy Bypass -File ...
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+.\benchmarks\summary64k\auto_run.ps1 -LlamaServer $server -OriginalSuite -SmokeOnly
+# then full short+long replay:
+.\benchmarks\summary64k\auto_run.ps1 -LlamaServer $server -OriginalSuite
+```
+
+The runner auto-selects the one RX9070XT Vulkan device; the index is resolved on the actual host. Add `-Device VulkanN` only after verifying the device list. Logs and outputs are written under `summary-benchmark-results`.
+
+**Two kinds of comparability:** (1) exact historical prompt+sampling parity, achievable here; (2) original full-execution parity, **not** achievable under the newly fixed RX9070XT/64K/KV Q8/Q8/MTP OFF requirements because the original 27B suite ran RX9060XT, context 98304, K Q8/V Q4 and an MTP-related model path. Report those environment differences explicitly; never label throughput values as same-condition GPU measurements. Prompt sets also include reasoning/security, so not every case is a summary task.
+
+The previously developed BNS-LCTX-02 multi-hop dataset is a **different** suite in `experiments/bonsai2-rx9060xt/multihop-v01` and is not included in `-OriginalSuite`; its replay requires its own exact generator and scoring logic. The existing historical 27B/Gemma26B result files remain unchanged and must be joined separately for comparisons.
