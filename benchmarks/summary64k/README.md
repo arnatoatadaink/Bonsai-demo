@@ -167,3 +167,44 @@ The runner auto-selects the one RX9070XT Vulkan device; the index is resolved on
 **Two kinds of comparability:** (1) exact historical prompt+sampling parity, achievable here; (2) original full-execution parity, **not** achievable under the newly fixed RX9070XT/64K/KV Q8/Q8/MTP OFF requirements because the original 27B suite ran RX9060XT, context 98304, K Q8/V Q4 and an MTP-related model path. Report those environment differences explicitly; never label throughput values as same-condition GPU measurements. Prompt sets also include reasoning/security, so not every case is a summary task.
 
 The previously developed BNS-LCTX-02 multi-hop dataset is a **different** suite in `experiments/bonsai2-rx9060xt/multihop-v01` and is not included in `-OriginalSuite`; its replay requires its own exact generator and scoring logic. The existing historical 27B/Gemma26B result files remain unchanged and must be joined separately for comparisons.
+
+
+## Results folder normalization (2026-10-15)
+
+Like the earlier `think-compare-v01` test, this runner now writes under a suite-local `results/run_YYYYMMDD_HHMMSS/` folder, not at the repository root. Each run contains `manifest.json`, `device-list.txt`, and one folder per new model:
+
+```text
+benchmarks/summary64k/
+  results/
+    run_YYYYMMDD_HHMMSS/
+      manifest.json
+      device-list.txt
+      bonsai8/
+        server.stdout.log
+        server.stderr.log
+        results.csv
+        bonsai8_L1_off.json ...
+        original-suite/     # when -OriginalSuite
+          manifest.json
+          trials.csv
+          short_Q01_summary_off.request.json ...
+      gemma12/
+      qwen9/
+    run_imported_YYYYMMDD_HHMMSS/
+      ... previous summary-benchmark-results contents (unmodified)
+```
+
+All `results/` output is ignored by Git. A separate run folder is created for each invocation. Existing results will not be overwritten.
+
+To relocate the previous results **without rewriting any filenames or CSV**, first preview and then move:
+
+```powershell
+.\benchmarks\summary64k\migrate_results.ps1
+.\benchmarks\summary64k\migrate_results.ps1 -Move
+```
+
+The migration source defaults to the old repository-root `summary-benchmark-results` folder, and the destination is `benchmarks/summary64k/results/run_imported_<timestamp>`. If the existing files are elsewhere, use `-Source "D:\path\to\summary-benchmark-results"`. If results only exist in a ZIP, extract them to the old root first; the migration helper moves folders, not ZIP files. Use `-DestinationName run_imported_previous` to choose a fixed name. Never move the earlier 27B/Gemma26B baseline results into the 8B suite unless explicitly preserving their source metadata; keep those legacy runs in their original experiment folders.
+
+PowerShell policy block? Launch with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\benchmarks\summary64k\migrate_results.ps1` (or use `Set-ExecutionPolicy -Scope Process Bypass` in the current terminal).
+
+The first automation version wrote `summary-benchmark-results/results.csv` and `*.stdout.log` side by side. Migration preserves this original internal layout in `run_imported_*` as historical evidence. New runs create per-model folders instead. Analysts should use the path and manifest to determine which schema applies.
