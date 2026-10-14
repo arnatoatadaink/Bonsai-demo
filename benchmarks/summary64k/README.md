@@ -119,3 +119,27 @@ Only after validating L1, rerun the appropriate Python command without `--levels
 There is **no MTP, draft-model or speculation argument**. Do not add `--reasoning-budget 0` globally: that would invalidate the ON measurements. The per-request ON/OFF switch remains provisional and must be checked in response and runtime logs. Verify the installed binary supports `--device`, `--jinja`, `-sm none`, and other flags via `--help`. Do not use a stock upstream binary for Bonsai PQ2_0.
 
 With RX 9070 XT 16GB, 64K q8/q8 may still exceed available VRAM depending on model and other loads. If offload falls back to CPU or context is reduced, record it as a failed comparability condition instead of reporting it as an identical-GPU benchmark. Preserve the startup log.
+
+
+## Automatic run: use the existing benchmark workflow
+
+The Windows PowerShell orchestrator starts each model sequentially, waits for llama-server health, runs the summary tests, saves device listing, server stdout/stderr and CSV/JSON, then stops the process before the next model.
+
+```powershell
+git fetch origin
+git switch bench/summary-rx9070xt-64k-20261015
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+
+$server = "D:\Bonsai-demo\bin\vulkan\llama-server.exe" # change to actual installed build
+.\benchmarks\summary64k\auto_run.ps1 -LlamaServer $server -SmokeOnly
+# after reviewing L1 output and logs:
+.\benchmarks\summary64k\auto_run.ps1 -LlamaServer $server
+```
+
+If the device listing cannot be parsed, inspect `summary-benchmark-results/device-list.txt`. If it explicitly identifies RX 9070 XT under Vulkan1, run with `-Device Vulkan1`. The script **does not assume** a universal fixed GPU index. Current Vulkan indexes cannot be obtained remotely from your Windows host; GPU order depends on the local runtime.
+
+This follows the project's prior `distributed-summary-v01` and `MTP-01` approaches: separate server lifecycle, raw logs, JSON/CSV and controlled backend knobs. It does **not** run MTP. The earlier suites have not been imported into this branch.
+
+**Limitations of this first automation:** It checks declared CLI options, GPU device listing, model file existence, HTTP readiness and request completion, but cannot prove that the runtime actually retained 65536 context, q8/q8 allocation, full GPU offload, or valid ON/OFF thinking. Those conditions require inspection of saved runtime logs and output. Passing `--acknowledge-server-settings` is an automation bypass of the runner's human confirmation gate, **not a successful configuration audit**. Synthetic fixture input size is approximate and quality remains unscored.
+
+If backend startup fails, check `*.stderr.log` for unsupported flags, memory fit or PQ2_0 compatibility. Do not silently reduce context or KV precision to get a passing result.
