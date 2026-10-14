@@ -1,7 +1,9 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-existing.ps1" -Model gemma
+py -3 "%~dp0run-existing.py" --model gemma
 set "RC=%ERRORLEVEL%"
+echo.
+echo Benchmark exit code: %RC%
 pause
 exit /b %RC%
