@@ -43,3 +43,7 @@ Each run writes results/{model}_{timestamp}/:
 ## v0.1.2: preflight hang workaround
 
 The 2026-10-14 Windows run stalled at full-prompt /tokenize with no visible GPU activity. That endpoint is no longer called. The runner now displays character count and proceeds to inference. Actual input tokens are available in summary.json after success. A future proper tokenizer-only preflight should be implemented separately; this is not a true token cap.
+
+## v0.1.3: Windows PowerShell 5.1 JSON hang workaround
+
+Two observed runs created zero-byte request.json and never advanced to inference. Both launch BAT files now invoke Python 3 standard-library run-existing.py rather than PowerShell ConvertTo-Json/Out-File. The old run-existing.ps1 remains for historical diagnosis only; do not run it. New requests print the request file byte size before issuing inference and print stage markers. A runtime-only preflight guarantees characters < 80000, not a true 64k tokenizer-bound validation. This suite does not stop/start any server. If a previous PowerShell runner remains hung, terminate only that runner process before new runs.
