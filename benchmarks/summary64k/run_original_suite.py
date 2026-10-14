@@ -40,8 +40,9 @@ def main():
     p.add_argument("--max-tokens", type=int, default=2048)
     p.add_argument("--timeout", type=int, default=1200)
     p.add_argument("--smoke", action="store_true")
+    p.add_argument("--flat-output", action="store_true", help="Write directly to --output; caller owns run directory")
     args = p.parse_args()
-    out = Path(args.output) / args.model / datetime.now(timezone.utc).strftime("run_%Y%m%d_%H%M%S")
+    out = Path(args.output) if args.flat_output else Path(args.output) / args.model / datetime.now(timezone.utc).strftime("run_%Y%m%d_%H%M%S")
     out.mkdir(parents=True, exist_ok=True)
     suites = ["short", "long"] if args.suite == "both" else [args.suite]
     modes = ["default", "off", "on"] if args.model != "gemma12" else ["default"]
