@@ -69,3 +69,53 @@ If the server model ID is ambiguous, supply `--server-model-id <id>`. Change URL
 5. Compare wall time, prompt/completion tokens, telemetry, output quality, and non-success cases independently.
 
 This is a preliminary evaluation harness, **not** an assertion that all listed models/runtimes already work with the chosen flags or thinking controls.
+
+
+## Ready-to-run Windows PowerShell launch commands
+
+The helper `start_server.ps1` supplies exact local GGUF paths and common arguments. It deliberately requires an explicit GPU device rather than assuming Vulkan0 is RX 9070 XT.
+
+In **terminal 1** (replace the executable path with your Prism Vulkan binary):
+
+```powershell
+$server = "D:\Bonsai-demo\bin\vulkan\llama-server.exe"
+& $server --list-devices
+# Select the entry whose name is AMD Radeon RX 9070 XT; Vulkan index is an example only:
+.\benchmarks\summary64k\start_server.ps1 -Model bonsai8 -LlamaServer $server -GpuDevice Vulkan0
+```
+
+In **terminal 2** run the L1 smoke test:
+
+```powershell
+python benchmarks/summary64k/run.py --model bonsai8 --levels 1 --acknowledge-server-settings
+```
+
+Stop terminal 1 with Ctrl+C. Then repeat using the SAME device and settings:
+
+```powershell
+.\benchmarks\summary64k\start_server.ps1 -Model gemma12 -LlamaServer $server -GpuDevice Vulkan0
+# In second terminal:
+python benchmarks/summary64k/run.py --model gemma12 --levels 1 --acknowledge-server-settings
+```
+
+```powershell
+.\benchmarks\summary64k\start_server.ps1 -Model qwen9 -LlamaServer $server -GpuDevice Vulkan0
+# In second terminal:
+python benchmarks/summary64k/run.py --model qwen9 --levels 1 --acknowledge-server-settings
+```
+
+Only after validating L1, rerun the appropriate Python command without `--levels 1` for all five levels. Each launch keeps the model process in the foreground so it can be stopped before loading the next model.
+
+### Exact llama-server flags applied by the helper
+
+```text
+-m <selected absolute GGUF path>
+--host 127.0.0.1 --port 8080
+--device VulkanN -ngl 99 -sm none
+-c 65536 --cache-type-k q8_0 --cache-type-v q8_0
+-fa on -np 1 --jinja
+```
+
+There is **no MTP, draft-model or speculation argument**. Do not add `--reasoning-budget 0` globally: that would invalidate the ON measurements. The per-request ON/OFF switch remains provisional and must be checked in response and runtime logs. Verify the installed binary supports `--device`, `--jinja`, `-sm none`, and other flags via `--help`. Do not use a stock upstream binary for Bonsai PQ2_0.
+
+With RX 9070 XT 16GB, 64K q8/q8 may still exceed available VRAM depending on model and other loads. If offload falls back to CPU or context is reduced, record it as a failed comparability condition instead of reporting it as an identical-GPU benchmark. Preserve the startup log.
