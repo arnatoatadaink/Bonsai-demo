@@ -6,7 +6,8 @@ param(
  [string]$OutputRoot='summary-benchmark-results',
  [int]$Port=18080,
  [int]$StartupTimeoutSeconds=240,
- [switch]$SmokeOnly
+ [switch]$SmokeOnly,
+ [switch]$OriginalSuite
 )
 $ErrorActionPreference='Stop'
 if (!(Test-Path -LiteralPath $LlamaServer -PathType Leaf)) {throw "Executable not found: $LlamaServer"}
@@ -63,7 +64,11 @@ foreach ($name in $selected) {
   }
   if (!$ready) {throw "Server startup timeout; see $stderr"}
   $lv=if ($SmokeOnly) {'1'} else {$Levels}
-  & python benchmarks/summary64k/run.py --model $name --levels $lv --base-url "http://127.0.0.1:$Port" --output $root --acknowledge-server-settings
+  if ($OriginalSuite) {
+   & python benchmarks/summary64k/run_original_suite.py --model $name --suite both --base-url "http://127.0.0.1:$Port" --output (Join-Path $root 'original-suite') $(if ($SmokeOnly) {'--smoke'})
+  } else {
+   & python benchmarks/summary64k/run.py --model $name --levels $lv --base-url "http://127.0.0.1:$Port" --output $root --acknowledge-server-settings
+  }
   if ($LASTEXITCODE -ne 0) {throw "Benchmark failed: $name"}
  } finally {
   if ($process -and !$process.HasExited) {Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue; $process.WaitForExit()}
