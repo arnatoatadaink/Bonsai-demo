@@ -232,3 +232,6 @@ llama.cpp
 .venv-hermes/
 .agent-browser/
 agent-runs/
+
+# Per-run generated summary64k results; keep existing baseline data outside git.
+/benchmarks/summary64k/results/
