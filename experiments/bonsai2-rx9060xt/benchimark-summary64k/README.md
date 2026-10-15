@@ -252,3 +252,22 @@ $server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
 ```
 
 Only the five ON cases are executed, under a fresh `results/run_YYYYMMDD_HHMMSS/qwen9/THINK-02/` folder. The L01–L05 source prompts are unchanged; the sole request change is `max_tokens: 2048 -> 8192`. Do not merge these with the old 2048-token run without distinguishing output budgets. If the answer still ends with `finish_reason=length`, document it and assess whether to retry with 16384 tokens; that is a separate condition. This setting applies only to THINK-02; Context remains 65536, KV K/V q8_0, MTP OFF and RX9070XT target. Reasoning control effectiveness still requires inspection.
+
+
+## Speed benchmark: baseline vs MTP (initial probe)
+
+The committed `speed_probe.py` measures three workloads × 3 repetitions, recording llama-server `timings`, total wall clock, tokens, finish reason, and raw responses. **It does not launch the model or enable MTP**. First start the target model with the same fixed RX9070XT/65536/Q8+Q8/FA settings, then run the probe in another terminal.
+
+Baseline:
+```powershell
+python experiments/bonsai2-rx9060xt/benchimark-summary64k/speed_probe.py --label qwen9_normal --output experiments/bonsai2-rx9060xt/benchimark-summary64k/results/speed_qwen9_normal
+```
+
+MTP candidate: stop the original server, verify `llama-server --help` lists `draft-mtp` and the exact MTP model/sidecar is compatible. Start with the same ordinary flags **plus** `--spec-type draft-mtp --spec-draft-n-max 3` (or model-specific flags documented for that converted model). Inspect server startup and speculative acceptance metrics. Run:
+```powershell
+python experiments/bonsai2-rx9060xt/benchimark-summary64k/speed_probe.py --label qwen9_mtp_n3 --output experiments/bonsai2-rx9060xt/benchimark-summary64k/results/speed_qwen9_mtp_n3
+```
+
+No MTP availability is inferred from directory names containing `MTP`. With unsupported heads or model metadata, do not report an MTP gain. Compare per-case median tg_tok_s and total time, quality/finish reasons, prompt tokens, backend logs, accepted draft-token rate and VRAM. Compute gain = MTP / baseline for TG, or baseline_time / MTP_time for latency. Test n-max 1/3/5 only **after** establishing MTP actually activates; store each configuration separately. Qwen3.5-9B, Bonsai8, Gemma4-12B, Bonsai2-27B and Gemma4-26B have different compatibility; only confirmed supported configurations are eligible for an MTP-on measurement. Official Bonsai2-27B DSpark is not released as of this check; DSpark is a different draft mechanism from MTP.
+
+As a first comparison, the probe uses Think OFF requests where supported to reduce hidden reasoning variability. A subsequent Think ON speed run needs identical max token and thought settings on both decoding modes. The benchmark intentionally does not change existing THINK/LCTX result files.
