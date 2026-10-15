@@ -14,10 +14,12 @@ def token_count(base,content,timeout):
     toks=obj.get("tokens")
     if not isinstance(toks,list):raise RuntimeError("/tokenize returned no tokens; refusing unverified long-context payload")
     return len(toks)
+def record_salt(iteration, i):
+    return hashlib.sha256(f"{iteration}:{i}:loadtest".encode()).hexdigest()[:16]
 def corpus(units, iteration=0):
     # High-entropy-ish record identifiers, deterministic; many scattered factual records and revisions.
     return "\n".join(
-      f"[REC-{i:06d}] SALT={hashlib.sha256(f\"{iteration}:{i}:loadtest\".encode()).hexdigest()[:16]} CASE={i%97:02d} REGION={['NORTH','EAST','SOUTH','WEST'][i%4]} "
+      f"[REC-{i:06d}] SALT={record_salt(iteration, i)} CASE={i%97:02d} REGION={['NORTH','EAST','SOUTH','WEST'][i%4]} "
       f"VERSION=2026-{(i%12)+1:02d}-{(i%27)+1:02d} "
       f"AMOUNT={((i*7919)%90001)+10000} STATUS={['PENDING','APPROVED','REVISED'][i%3]} "
       f"KEY=K{i:06d} VALUE=V{((i*8191)%999983):06d}"
