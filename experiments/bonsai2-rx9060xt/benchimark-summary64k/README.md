@@ -208,3 +208,34 @@ The migration source defaults to the old repository-root `summary-benchmark-resu
 PowerShell policy block? Launch with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\experiments\bonsai2-rx9060xt\benchimark-summary64k\migrate_results.ps1` (or use `Set-ExecutionPolicy -Scope Process Bypass` in the current terminal).
 
 The first automation version wrote `summary-benchmark-results/results.csv` and `*.stdout.log` side by side. Migration preserves this original internal layout in `run_imported_*` as historical evidence. New runs create per-model folders instead. Analysts should use the path and manifest to determine which schema applies.
+
+
+## Legacy baseline test keys (exact original generators/prompts)
+
+Found on `origin/bench/bonsai2-think-compare-v01`:
+
+| Key | Existing path | Contents | Reuse |
+|---|---|---|---|
+| BNS-THINK-02 / GEM-THINK-02 | `think-compare-v01/questions-long.json` | Five evidence-faithfulness scenarios × default/off/on in legacy Bonsai runner | `-LegacySuite think02` |
+| BNS-LCTX-01 | `distributed-summary-v01/generate.py` | 24 dispersed Japanese facts, strict F01–F24 answers | `-LegacySuite lctx01` |
+| BNS-LCTX-02 | `multihop-v01/generate.py` | 40 cases in G1–G5, multi-hop links and evidence record IDs | `-LegacySuite lctx02` |
+
+The new `run_lctx_legacy.py` fetches the old generators from Git verbatim and creates the same deterministic dataset parameters (LCTX01 target 65000 characters; LCTX02 target 80000). It reproduces the original request fields and exact-match screening. It stores raw requests/responses, computed datasets, scores and timing under each run. The original 27B/26B response/results folders are NOT modified or copied.
+
+```powershell
+git fetch origin bench/bonsai2-think-compare-v01
+git switch bench/summary-rx9070xt-64k-20261015
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_run.ps1 -LlamaServer $server -LegacySuite all
+```
+
+Use `-LegacySuite think02`, `-LegacySuite lctx01` or `-LegacySuite lctx02` individually. `-SmokeOnly` shortens THINK-02 only; LCTX suites are not shortened so their baseline data remains identical.
+
+Output paths: `results/run_<timestamp>/<model>/THINK-02/`, `.../LCTX01/`, `.../LCTX02/`, alongside each model's `server.stdout.log` and `server.stderr.log`. This is the same run-folder convention as prior tests. `fact_checks.csv` and `metrics.json` are emitted for LCTX-02; `fact_checks.csv`, `metrics.json`, `summary.json` for LCTX-01; `trials.csv` for THINK-02.
+
+**Comparability:** input questions and strict scoring are preserved. 27B baseline's original RX9060XT/96K/K Q8 V Q4 environment is DIFFERENT from RX9070XT/64K/K Q8 V Q8, so compare answer quality within source tests, not throughput as same conditions. The ON/OFF request settings do not prove reasoning is actually toggled. Gemma12 uses default only. If full documents overflow real 64K capacity, record failure without shrinking inputs silently.
+
+**Important:** the key-to-file attribution of THINK-02 is based on the existing documented faithfulness suite; compare historical run manifests before merging scores if the two original THINK-02 sessions used different revisions of the test.
