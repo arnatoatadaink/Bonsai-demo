@@ -13,10 +13,12 @@ param(
  [int]$StartupTimeoutSeconds=300,
  [int]$RequestTimeoutSeconds=900,
  [int]$CooldownSeconds=10,
- [string]$OutputRoot=''
+ [string]$OutputRoot='',
+ [int]$LongInputTokens=0
 )
 $ErrorActionPreference='Stop'
 if($Repeat -lt 1 -or $Repeat -gt 10000 -or $Context -lt 4096 -or $MaxTokens -lt 1){throw 'Invalid parameter'}
+if($LongInputTokens -gt 0 -and $LongInputTokens+$MaxTokens+1024 -gt $Context){throw 'Long input plus output and safety reserve exceeds context'}
 $here=Split-Path -Parent $MyInvocation.MyCommand.Path
 $root=if($OutputRoot){[IO.Path]::GetFullPath($OutputRoot)}else{Join-Path $here 'results'}
 $run=Join-Path $root ('run_mtp_continuous_'+(Get-Date -Format 'yyyyMMdd_HHmmss'))
@@ -43,7 +45,7 @@ foreach($flag in @('--ctx-checkpoints','--fit','--spec-type','--spec-draft-n-max
 $draftFlag=if($helpText.Contains('--spec-draft-model')){'--spec-draft-model'}elseif($helpText.Contains('--model-draft')){'--model-draft'}else{throw "No draft model option"}
 $draftNgl=if($helpText.Contains('--spec-draft-ngl')){'--spec-draft-ngl'}elseif($helpText.Contains('--n-gpu-layers-draft')){'--n-gpu-layers-draft'}else{''}
 if(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue){throw "Port $Port is in use"}
-$manifest=[ordered]@{gpu="RX $Gpu XT";device=$device;server=$exe;server_sha256=(Get-FileHash $exe -Algorithm SHA256).Hash;models=$selected;repeat=$Repeat;context=$Context;checkpoint=0;fit='off';cache_k='q8_0';cache_v='q8_0';fa='on';draft_n_max=$DraftNMax;max_tokens=$MaxTokens;created=(Get-Date).ToString('o');workload='repeated deterministic structured answer'}
+$manifest=[ordered]@{gpu="RX $Gpu XT";device=$device;server=$exe;server_sha256=(Get-FileHash $exe -Algorithm SHA256).Hash;models=$selected;repeat=$Repeat;context=$Context;checkpoint=0;fit='off';cache_k='q8_0';cache_v='q8_0';fa='on';draft_n_max=$DraftNMax;max_tokens=$MaxTokens;created=(Get-Date).ToString('o');workload=$(if($LongInputTokens -gt 0){'exact-tokenized long-context MTP inference'}else{'repeated deterministic structured answer'});long_input_tokens=$LongInputTokens}
 $manifest|ConvertTo-Json -Depth 6|Set-Content -Encoding UTF8 (Join-Path $run 'manifest.json')
 $rows=New-Object System.Collections.Generic.List[object]
 function SaveRows {if($rows.Count -gt 0){$rows|Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $run 'trials.csv')}}
@@ -82,6 +84,10 @@ foreach($name in $selected){
   if(!$ready){throw 'Startup timeout'}
   $meta=Invoke-RestMethod "http://127.0.0.1:$Port/v1/models" -TimeoutSec 15
   $meta|ConvertTo-Json -Depth 10|Set-Content -Encoding UTF8 (Join-Path $dir 'models.json')
+  if($LongInputTokens -gt 0){
+   & python (Join-Path $here 'long_context_probe.py') --base-url "http://127.0.0.1:$Port" --output (Join-Path $dir 'long_input') --repeat $Repeat --target-tokens $LongInputTokens --context $Context --max-tokens $MaxTokens --timeout $RequestTimeoutSeconds
+   if($LASTEXITCODE -ne 0){throw "Long context probe failed for $name; inspect long_input/trials.csv"}
+  } else {
   for($i=1;$i -le $Repeat;$i++){
    $proc.Refresh()
    if($proc.HasExited){$modelError="Server exited before request $i, exit=$($proc.ExitCode)";break}
@@ -103,6 +109,7 @@ foreach($name in $selected){
    if($status -ne 'OK' -or $dead){$modelError="Failure at request $i";break}
    if($CooldownSeconds -gt 0){Start-Sleep -Seconds $CooldownSeconds}
   }
+  }
  }catch{
   $modelError=$_.Exception.Message
  }finally{
@@ -113,7 +120,12 @@ foreach($name in $selected){
 }
 $summary=@($selected|ForEach-Object{
  $n=$_;$subset=@($rows|Where-Object {$_.model -eq $n})
- [pscustomobject]@{model=$n;requested=$Repeat;completed=@($subset|Where-Object {$_.status -eq 'OK'}).Count;failed=@($subset|Where-Object {$_.status -ne 'OK'}).Count;not_attempted=$Repeat-$subset.Count}
+ $longSummary=Join-Path (Join-Path $run $n) 'long_input/summary.json'
+ if($LongInputTokens -gt 0){
+  if(Test-Path -LiteralPath $longSummary){$d=Get-Content -LiteralPath $longSummary -Raw | ConvertFrom-Json;[pscustomobject]@{model=$n;requested=$Repeat;completed=$d.passed;failed=$d.failed;not_attempted=$Repeat-$d.attempted}}
+  else{[pscustomobject]@{model=$n;requested=$Repeat;completed=0;failed=1;not_attempted=$Repeat}}
+ }else{[pscustomobject]@{model=$n;requested=$Repeat;completed=@($subset|Where-Object {$_.status -eq 'OK'}).Count;failed=@($subset|Where-Object {$_.status -ne 'OK'}).Count;not_attempted=$Repeat-$subset.Count}}
+
 })
 $summary|ConvertTo-Json -Depth 5|Set-Content -Encoding UTF8 (Join-Path $run 'summary.json')
 $summary|Format-Table -AutoSize
