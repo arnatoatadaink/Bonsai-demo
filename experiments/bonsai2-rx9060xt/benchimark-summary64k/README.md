@@ -345,3 +345,25 @@ $server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
 ```
 
 For RX9070XT loader runs: change `-Gpu 9060` to `-Gpu 9070`. For production-like 64K, explicitly add `-Context 65536`, but monitor memory pressure. `-ProbeInference` performs a 16-token test to exercise MTP beyond startup; omitted by default for the narrow load-failure question. No performance number is claimed from this diagnostic. `summary.json` success means API readiness and model list, not that drafting token acceptance occurred; acceptance requires inspection of runtime logs or an inference probe.
+
+
+## RX9060XT MTP continuous inference reliability (2026-10-15)
+
+The restart-only smoke test `run_mtp_restart_20261015_172926` supplied by the user passed Gemma4 12B 10/10 and Gemma4 26B 10/10 at context 4096, K/V q8_0, `--ctx-checkpoints 0 --fit off`; no inference request was sent. This does not prove a 64K generation workload is stable.
+
+`auto_mtp_continuous.ps1` now starts each Gemma4 model once, issues **20 sequential identical deterministic summary requests** (500-ish token ceiling; default 512), preserves every request/response/elapsed time, and stops the owned server between models. On the first request error or server exit, it records a failure, preserves logs, and proceeds to the next model. Never terminates unrelated running servers.
+
+```powershell
+git switch bench/summary-rx9070xt-64k-20261015
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+# First run: 20 consecutive requests per model, on RX9060XT.
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_mtp_continuous.ps1 -LlamaServer $server -Model all -Gpu 9060 -Repeat 20 -Context 4096
+# AFTER checking GPU memory headroom, production-context test:
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_mtp_continuous.ps1 -LlamaServer $server -Model all -Gpu 9060 -Repeat 20 -Context 65536
+```
+
+Default context is 65536; explicitly pass `-Context 4096` for initial comparison to restart smoke-test. **With Fit OFF, 64K + Q8 KV + MTP can exhaust RX9060XT memory**. Do not begin the 64K run if allocation approaches the GPU capacity; decrease context only in a new labeled test condition. Testing 20 short requests at context 64K does NOT exercise a 64K prompt; it tests request-to-request stability with a large allocated context. Long-prompt endurance is a separate workload.
+
+Default `-CooldownSeconds 10` reduces thermal load; increasing it lowers duty cycle. Set `-Repeat 10` initially or `-Repeat 40` later. This tests MTP request processing and persistent server state, not graceful teardown or unrelated GPU driver's device-loss problems. A pass requires successful API responses and no detected child-server crash; actual speculative acceptance needs log confirmation. Output is `results/run_mtp_continuous_<timestamp>/{manifest.json,trials.csv,summary.json,gemma12,gemma26}`.
