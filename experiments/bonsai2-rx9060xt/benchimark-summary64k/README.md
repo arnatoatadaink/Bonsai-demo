@@ -389,3 +389,20 @@ $server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
 Use `-Model gemma12` for the other model. New files are in `<model>/long_input/` including `prompt.txt`, `long_input_manifest.json`, `trials.csv`, `summary.json`, and each `response_NNN.json`. The upper-level `summary.json` reports pass/fail per model. Each request uses the same prompt and repeats to exercise long prompt processing and persistent model state; for eviction/changing-context regression tests, alternate prompts in a separate later suite.
 
 **Important:** RX9070XT can overheat under sustained load. Start at 10 requests, watch temperature and GPU memory in a separate monitor, stop on errors or excessive temperature. This script does not measure GPU junction sensors. With fit off and 64K Q8 KV, memory headroom must be checked manually. 
+
+
+## Avoiding KV/prefix-cache hits for long-context crash tests
+
+Results from `run_mtp_continuous_20261015_184112` show strong repeated-input caching: Gemma26 on RX9070XT processed the 57,397-token prompt in 48.913 s on request #1 and ~1.01 s on requests #2–20, while the completions remained identical (123 tokens). Thus successful repeats did **not** repeat full 57K prefill.
+
+Use `-InputMode vary` with `-LongInputTokens`. Each request gets a deterministic but different `SALT` value **in every synthetic record**, defeating long-prefix reuse. Each changed request is tokenized and rejected if too short or if it risks exceeding context. `long_input/trials.csv` stores `input_mode`, `tokenize_tokens`, `prompt_sha256`, API-reported `prompt_tokens` and latency. Each prompt is separately preserved as `prompt_NNN.txt`. `fixed` remains the default for regression comparison.
+
+```powershell
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_mtp_continuous.ps1 -LlamaServer $server -Model gemma26 -Gpu 9070 -Context 65536 -LongInputTokens 32768 -InputMode vary -Repeat 10
+# After checking VRAM/temperature, 56K repeated PP:
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_mtp_continuous.ps1 -LlamaServer $server -Model gemma26 -Gpu 9070 -Context 65536 -LongInputTokens 57344 -InputMode vary -Repeat 20
+```
+
+The repeated prompt variants have the same question and approximate difficulty, but differ in every record's salt. Check PP wall time and logs to confirm the intended cache-miss behavior. `--ctx-checkpoints 0` does not necessarily disable automatic prefix reuse. This test still uses synthetic text; a later human-document workload should be separate.
