@@ -232,3 +232,6 @@ llama.cpp
 .venv-hermes/
 .agent-browser/
 agent-runs/
+
+# Per-run generated summary64k results; keep existing baseline data outside git.
+/experiments/bonsai2-rx9060xt/benchimark-summary64k/results/
