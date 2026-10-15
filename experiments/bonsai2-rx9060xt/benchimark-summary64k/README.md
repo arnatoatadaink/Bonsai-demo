@@ -290,3 +290,21 @@ python experiments/bonsai2-rx9060xt/benchimark-summary64k/speed_probe.py --label
 ```
 
 Replace `qwen9` with `gemma12` or `gemma26` for corresponding model and MTP pair. A successful process launch does not establish MTP activation: verify speculative initialization, draft accepted rate and that selected Vulkan GPU is RX9070XT. Baseline and MTP must use the same backend binary and model path. Keep separate timing runs and note GPU memory pressure. These examples do not auto-start or stop the speed probe.
+
+
+## One-command automatic speed run
+
+Use `auto_speed.ps1` to launch/stop each llama-server configuration, and run `speed_probe.py` automatically. Existing servers on the same port are rejected; no external process is stopped. Baseline and MTP use the same target GGUF, RX9070XT Vulkan device, 65536 context, q8_0 K/V, Flash Attention and 3 repetitions per workload.
+
+```powershell
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_speed.ps1 -LlamaServer $server -Model qwen9 -Mode both -DraftNMax 4
+# Then all three supported target configurations:
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_speed.ps1 -LlamaServer $server -Model all -Mode both -DraftNMax 4
+```
+
+Output: `results/run_speed_YYYYMMDD_HHMMSS/manifest.json`, `device-list.txt`, and per-configuration `qwen9_baseline/`, `qwen9_mtp/`, `gemma12_*/`, `gemma26_*/`, each containing startup logs, argv, raw JSON, trials.csv and summary.json.
+
+**MTP verification gate**: The requested MTP flag and successful API output alone do not confirm a functioning MTP kernel; inspect the startup logs and speculative acceptance counters. Existing baseline logs showing `blk.32.nextn.* -- ignoring` prove NextN tensors are present but unused in baseline mode. This is expected. Mark MTP runs unverified until actual speculative draft activity appears. If MTP launch fails (unsupported binary, incompatible Gemma QAT target, or VRAM limit), record failure and do not fabricate speedup ratios. The helper currently collects evidence and measurements; acceptance-rate verification remains manual.
