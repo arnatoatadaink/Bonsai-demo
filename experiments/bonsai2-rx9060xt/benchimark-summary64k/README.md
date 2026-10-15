@@ -308,3 +308,24 @@ $server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
 Output: `results/run_speed_YYYYMMDD_HHMMSS/manifest.json`, `device-list.txt`, and per-configuration `qwen9_baseline/`, `qwen9_mtp/`, `gemma12_*/`, `gemma26_*/`, each containing startup logs, argv, raw JSON, trials.csv and summary.json.
 
 **MTP verification gate**: The requested MTP flag and successful API output alone do not confirm a functioning MTP kernel; inspect the startup logs and speculative acceptance counters. Existing baseline logs showing `blk.32.nextn.* -- ignoring` prove NextN tensors are present but unused in baseline mode. This is expected. Mark MTP runs unverified until actual speculative draft activity appears. If MTP launch fails (unsupported binary, incompatible Gemma QAT target, or VRAM limit), record failure and do not fabricate speedup ratios. The helper currently collects evidence and measurements; acceptance-rate verification remains manual.
+
+
+## Gemma4 MTP crash triage (2026-10-15)
+
+Reported: `Starting gemma12 / mtp / Vulkan1` followed by llama-server crash. Similar upstream reports: llama.cpp issues #25873 (Gemma4 12B drafter warmup assertion), #24492 (wrong draft backend / cross-context shared KV), and #24795 (loader regression). **No definite cause until stderr is inspected**.
+
+`auto_speed.ps1` now:
+- Selects `--spec-draft-model` vs `--model-draft` based on `llama-server --help`.
+- Adds `--spec-draft-device VulkanN` where supported to pin the drafter to the RX9070XT.
+- Pins drafter GPU layers when supported.
+- Has `-DiagnosticShortContext` for c=4096, to distinguish memory demand from early loader failures. This run does **not** match 64K speed benchmark conditions; do not include it in speed tables.
+
+**First test only Gemma12 MTP**, leaving already-collected baseline intact:
+
+```powershell
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_speed.ps1 -LlamaServer $server -Model gemma12 -Mode mtp -DraftNMax 2 -Repeat 1 -DiagnosticShortContext
+```
+
+After crash, inspect `results/run_speed_*/gemma12_mtp/argv.txt`, `server.stderr.log`, and `failure.txt`. A crash even before the model is loaded is different from `invalid vector subscript` or `pre-allocated tensor ... NONE` during MTP warmup. Do not retry all models until this diagnosis is resolved. If the short-context run works, rerun without `-DiagnosticShortContext` for comparable 64K test. On repeated launch crash, prefer a separate compatible llama.cpp build over randomly toggling KV/Flash-Attention flags.
