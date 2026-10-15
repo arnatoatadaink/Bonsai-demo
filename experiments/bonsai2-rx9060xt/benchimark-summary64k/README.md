@@ -367,3 +367,25 @@ $server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
 Default context is 65536; explicitly pass `-Context 4096` for initial comparison to restart smoke-test. **With Fit OFF, 64K + Q8 KV + MTP can exhaust RX9060XT memory**. Do not begin the 64K run if allocation approaches the GPU capacity; decrease context only in a new labeled test condition. Testing 20 short requests at context 64K does NOT exercise a 64K prompt; it tests request-to-request stability with a large allocated context. Long-prompt endurance is a separate workload.
 
 Default `-CooldownSeconds 10` reduces thermal load; increasing it lowers duty cycle. Set `-Repeat 10` initially or `-Repeat 40` later. This tests MTP request processing and persistent server state, not graceful teardown or unrelated GPU driver's device-loss problems. A pass requires successful API responses and no detected child-server crash; actual speculative acceptance needs log confirmation. Output is `results/run_mtp_continuous_<timestamp>/{manifest.json,trials.csv,summary.json,gemma12,gemma26}`.
+
+
+## Context-sized continuous MTP input (2026-10-15)
+
+The **new** `-LongInputTokens` option calls `long_context_probe.py`, generating deterministic synthetic ledger text and using server `/tokenize` to count **actual input tokens before sending**. It reserves 1024 tokens in addition to MaxTokens, records `usage.prompt_tokens`, timings, payload checksum and per-request responses. Token count from `/tokenize` excludes chat template overhead, which is checked in the response usage. If `/tokenize` is unsupported or stalls, it exits with error rather than silently using a character-count guess.
+
+Previous `run_mtp_continuous_20261015_181057` passed Gemma26 RX9070XT 20/20 at context 65536, but used short input; this extension stresses **long prompt processing**.
+
+Run one model at a time to manage thermal load. All retain MTP, ctx-checkpoints=0, fit=off, K/V q8_0, FA on and RX9070XT.
+
+```powershell
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+# First: 32K actual input, 10 requests
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_mtp_continuous.ps1 -LlamaServer $server -Model gemma26 -Gpu 9070 -Context 65536 -LongInputTokens 32768 -Repeat 10
+# After validation: 56K input, 20 requests
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_mtp_continuous.ps1 -LlamaServer $server -Model gemma26 -Gpu 9070 -Context 65536 -LongInputTokens 57344 -Repeat 20
+```
+
+Use `-Model gemma12` for the other model. New files are in `<model>/long_input/` including `prompt.txt`, `long_input_manifest.json`, `trials.csv`, `summary.json`, and each `response_NNN.json`. The upper-level `summary.json` reports pass/fail per model. Each request uses the same prompt and repeats to exercise long prompt processing and persistent model state; for eviction/changing-context regression tests, alternate prompts in a separate later suite.
+
+**Important:** RX9070XT can overheat under sustained load. Start at 10 requests, watch temperature and GPU memory in a separate monitor, stop on errors or excessive temperature. This script does not measure GPU junction sensors. With fit off and 64K Q8 KV, memory headroom must be checked manually. 
