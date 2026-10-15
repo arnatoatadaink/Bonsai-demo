@@ -38,6 +38,7 @@ def main():
     p.add_argument("--source-ref", default=REPO_REF)
     p.add_argument("--output", default="summary-benchmark-results/original-suite")
     p.add_argument("--max-tokens", type=int, default=2048)
+    p.add_argument("--modes", default="", help="Comma-separated request modes e.g. on")
     p.add_argument("--timeout", type=int, default=1200)
     p.add_argument("--smoke", action="store_true")
     p.add_argument("--flat-output", action="store_true", help="Write directly to --output; caller owns run directory")
@@ -45,7 +46,11 @@ def main():
     out = Path(args.output) if args.flat_output else Path(args.output) / args.model / datetime.now(timezone.utc).strftime("run_%Y%m%d_%H%M%S")
     out.mkdir(parents=True, exist_ok=True)
     suites = ["short", "long"] if args.suite == "both" else [args.suite]
-    modes = ["default", "off", "on"] if args.model != "gemma12" else ["default"]
+    modes = [x.strip() for x in args.modes.split(",") if x.strip()] if args.modes else (["default", "off", "on"] if args.model != "gemma12" else ["default"])
+    if not modes or any(x not in ("default", "off", "on") for x in modes):
+        p.error("Invalid --modes. Use default,off,on.")
+    if args.model == "gemma12" and any(x != "default" for x in modes):
+        p.error("Gemma12 only supports default in this test protocol.")
     manifest = {"source_ref": args.source_ref, "source_path": ROOT, "suites": suites,
                 "modes": modes, "model": args.model, "backend": args.base_url,
                 "max_tokens": args.max_tokens, "sampling": {"temperature": 0, "top_k": 1, "seed": 42},
