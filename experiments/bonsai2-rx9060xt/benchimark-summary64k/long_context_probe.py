@@ -14,10 +14,10 @@ def token_count(base,content,timeout):
     toks=obj.get("tokens")
     if not isinstance(toks,list):raise RuntimeError("/tokenize returned no tokens; refusing unverified long-context payload")
     return len(toks)
-def corpus(units):
+def corpus(units, iteration=0):
     # High-entropy-ish record identifiers, deterministic; many scattered factual records and revisions.
     return "\n".join(
-      f"[REC-{i:06d}] CASE={i%97:02d} REGION={['NORTH','EAST','SOUTH','WEST'][i%4]} "
+      f"[REC-{i:06d}] SALT={hashlib.sha256(f\"{iteration}:{i}:loadtest\".encode()).hexdigest()[:16]} CASE={i%97:02d} REGION={['NORTH','EAST','SOUTH','WEST'][i%4]} "
       f"VERSION=2026-{(i%12)+1:02d}-{(i%27)+1:02d} "
       f"AMOUNT={((i*7919)%90001)+10000} STATUS={['PENDING','APPROVED','REVISED'][i%3]} "
       f"KEY=K{i:06d} VALUE=V{((i*8191)%999983):06d}"
@@ -32,16 +32,17 @@ def main():
  p.add_argument("--max-tokens",type=int,default=512)
  p.add_argument("--timeout",type=int,default=900)
  p.add_argument("--tokenize-timeout",type=int,default=180)
+ p.add_argument("--input-mode",choices=["fixed","vary"],default="fixed")
  a=p.parse_args()
  if a.target_tokens+a.max_tokens+1024 > a.context: p.error("Target + generation + reserve exceeds context")
  out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
  base=a.base_url.rstrip("/")
  # Exponential expansion then binary search by record count; deterministic prompt shared across all iterations.
- def assemble(n):
+ def assemble(n, iteration=0):
   return ("The following synthetic audit ledger is test data. Use only its records. "
    "Return exactly the KEY, VALUE, AMOUNT and STATUS from REC-000001, REC-000097 and "
    "REC-000193. If a record is absent, say MISSING. Output brief labeled lines.\n"
-   "BEGIN LEDGER\n"+corpus(n)+"\nEND LEDGER\n"
+   "BEGIN LEDGER\n"+corpus(n,iteration)+"\nEND LEDGER\n"
    "QUESTIONS: REC-000001, REC-000097, REC-000193\n")
  cache={}
  def count(n):
@@ -62,14 +63,22 @@ def main():
  (out/"prompt.txt").write_text(prompt,encoding="utf-8")
  meta={"target_tokens":a.target_tokens,"tokenize_tokens_without_template":exact,
   "context":a.context,"max_tokens":a.max_tokens,"prompt_sha256":hashlib.sha256(prompt.encode()).hexdigest(),
-  "records":hi,"note":"Actual chat-template tokens are separately recorded from response usage; /tokenize excludes chat-template wrappers."}
+  "records":hi,"input_mode":a.input_mode,"note":"Actual chat-template tokens are separately recorded from response usage; /tokenize excludes chat-template wrappers."}
  (out/"long_input_manifest.json").write_text(json.dumps(meta,indent=2),encoding="utf-8")
  rows=[]
  for i in range(1,a.repeat+1):
-  body={"messages":[{"role":"user","content":prompt}],"max_tokens":a.max_tokens,
+  effective_prompt=prompt if a.input_mode=="fixed" else assemble(hi,i)
+  effective_tokens=exact if a.input_mode=="fixed" else token_count(base,effective_prompt,a.tokenize_timeout)
+  if effective_tokens+a.max_tokens+1024>a.context:
+   raise RuntimeError(f"Iteration {i} exceeded context budget ({effective_tokens} tokens)")
+  if effective_tokens < a.target_tokens*0.88:
+   raise RuntimeError(f"Iteration {i} too short for comparable workload ({effective_tokens} tokens)")
+  if a.input_mode=="vary":
+   (out/f"prompt_{i:03d}.txt").write_text(effective_prompt,encoding="utf-8")
+  body={"messages":[{"role":"user","content":effective_prompt}],"max_tokens":a.max_tokens,
    "temperature":0,"top_k":1,"seed":42,"reasoning_effort":"none","chat_template_kwargs":{"enable_thinking":False}}
   start=time.monotonic()
-  row={"iteration":i,"status":"ERROR","prompt_tokens":"","completion_tokens":"","pp_tok_s":"","tg_tok_s":"","finish_reason":"","elapsed_sec":"","error":""}
+  row={"iteration":i,"status":"ERROR","prompt_tokens":"","completion_tokens":"","pp_tok_s":"","tg_tok_s":"","finish_reason":"","elapsed_sec":"","error":"","input_mode":a.input_mode,"tokenize_tokens":effective_tokens,"prompt_sha256":hashlib.sha256(effective_prompt.encode()).hexdigest()}
   try:
    res=post(base,"/v1/chat/completions",body,a.timeout)
    choice=res["choices"][0];tim=res.get("timings") or {};usage=res.get("usage") or {}
@@ -89,7 +98,7 @@ def main():
   print(f"[long-input {i}/{a.repeat}] status={row['status']} prompt={row['prompt_tokens']} elapsed={row['elapsed_sec']}s",flush=True)
   if row["status"]!="OK":break
  summary={"attempted":len(rows),"passed":sum(x["status"]=="OK" for x in rows),"failed":sum(x["status"]!="OK" for x in rows),
-          "requested":a.repeat,"target_tokens":a.target_tokens,"actual_tokenize_tokens":exact}
+          "requested":a.repeat,"target_tokens":a.target_tokens,"actual_tokenize_tokens":exact,"input_mode":a.input_mode}
  (out/"summary.json").write_text(json.dumps(summary,indent=2),encoding="utf-8")
  if summary["passed"]!=a.repeat:sys.exit(2)
 if __name__=="__main__": main()
