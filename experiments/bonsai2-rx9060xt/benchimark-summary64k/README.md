@@ -329,3 +329,19 @@ $server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
 ```
 
 After crash, inspect `results/run_speed_*/gemma12_mtp/argv.txt`, `server.stderr.log`, and `failure.txt`. A crash even before the model is loaded is different from `invalid vector subscript` or `pre-allocated tensor ... NONE` during MTP warmup. Do not retry all models until this diagnosis is resolved. If the short-context run works, rerun without `-DiagnosticShortContext` for comparable 64K test. On repeated launch crash, prefer a separate compatible llama.cpp build over randomly toggling KV/Flash-Attention flags.
+
+
+## MTP load/restart reliability test (10× per model)
+
+`auto_mtp_restart.ps1` is independent of speed benchmarks. It sequentially starts Gemma4-12B and Gemma4-26B A4B with their user-specified Q8_0 MTP drafts, waits for `/health`, optionally sends a tiny inference probe, and stops *only the child process it created*. Each model gets 10 attempts and each attempt has its own argv, stderr/stdout, optional probe, and error result. Failures are recorded and the next attempt continues.
+
+**Stability settings are mandatory:** `--ctx-checkpoints 0 --fit off`; RX9060XT is default; RX9070XT may be specified. To reduce VRAM pressure during initial **loader-only** verification, context defaults to 4096. It is **not equivalent to the 65536-context production test**. Before a 64K run, confirm the 9060XT has enough VRAM/system memory for target+MTP drafter+KV. The test writes `results/run_mtp_restart_YYYYMMDD_HHMMSS/{manifest.json,trials.csv,summary.json,gemma12/restart_01/...,gemma26/restart_10/...}`. Driver version should be recorded externally (26.3.1 as tested). The process is force-stopped (Windows Stop-Process), so this is a startup/reallocation stress test **not** a graceful shutdown regression test.
+
+```powershell
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_mtp_restart.ps1 -LlamaServer $server -Model all -Gpu 9060 -Repeat 10
+```
+
+For RX9070XT loader runs: change `-Gpu 9060` to `-Gpu 9070`. For production-like 64K, explicitly add `-Context 65536`, but monitor memory pressure. `-ProbeInference` performs a 16-token test to exercise MTP beyond startup; omitted by default for the narrow load-failure question. No performance number is claimed from this diagnostic. `summary.json` success means API readiness and model list, not that drafting token acceptance occurred; acceptance requires inspection of runtime logs or an inference probe.
