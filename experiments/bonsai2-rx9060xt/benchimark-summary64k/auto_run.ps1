@@ -7,7 +7,8 @@ param(
  [int]$Port=18080,
  [int]$StartupTimeoutSeconds=240,
  [switch]$SmokeOnly,
- [switch]$OriginalSuite
+ [switch]$OriginalSuite,
+ [ValidateSet('none','think02','lctx01','lctx02','all')][string]$LegacySuite='none'
 )
 $ErrorActionPreference='Stop'
 if (!(Test-Path -LiteralPath $LlamaServer -PathType Leaf)) {throw "Executable not found: $LlamaServer"}
@@ -71,7 +72,17 @@ foreach ($name in $selected) {
   }
   if (!$ready) {throw "Server startup timeout; see $stderr"}
   $lv=if ($SmokeOnly) {'1'} else {$Levels}
-  if ($OriginalSuite) {
+  if ($LegacySuite -ne 'none') {
+   $requestedSuites=if ($LegacySuite -eq 'all') {@('think02','lctx01','lctx02')} else {@($LegacySuite)}
+   foreach ($legacy in $requestedSuites) {
+    if ($legacy -eq 'think02') {
+     & python experiments/bonsai2-rx9060xt/benchimark-summary64k/run_original_suite.py --model $name --suite long --base-url "http://127.0.0.1:$Port" --output (Join-Path $modelDir 'THINK-02') --flat-output $(if ($SmokeOnly) {'--smoke'})
+    } else {
+     & python experiments/bonsai2-rx9060xt/benchimark-summary64k/run_lctx_legacy.py --suite $legacy --base-url "http://127.0.0.1:$Port" --output (Join-Path $modelDir $legacy.ToUpperInvariant())
+    }
+    if ($LASTEXITCODE -ne 0) {throw "Legacy benchmark failed: $name / $legacy"}
+   }
+  } elseif ($OriginalSuite) {
    & python experiments/bonsai2-rx9060xt/benchimark-summary64k/run_original_suite.py --model $name --suite both --base-url "http://127.0.0.1:$Port" --output (Join-Path $modelDir 'original-suite') --flat-output $(if ($SmokeOnly) {'--smoke'})
   } else {
    & python experiments/bonsai2-rx9060xt/benchimark-summary64k/run.py --model $name --levels $lv --base-url "http://127.0.0.1:$Port" --output $modelDir --acknowledge-server-settings
