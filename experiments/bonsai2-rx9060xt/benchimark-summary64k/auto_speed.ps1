@@ -9,7 +9,8 @@ param(
  [int]$DraftNMax=4,
  [int]$Repeat=3,
  [int]$StartupTimeoutSeconds=300,
- [string]$OutputRoot=''
+ [string]$OutputRoot='',
+ [switch]$DiagnosticShortContext
 )
 $ErrorActionPreference='Stop'
 $here=Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -36,9 +37,11 @@ $selected=if($Model -eq 'all'){@('qwen9','gemma12','gemma26')}else{@($Model)}
 $modes=if($Mode -eq 'both'){@('baseline','mtp')}else{@($Mode)}
 $helpText=(& $LlamaServer --help 2>&1 | Out-String)
 if($Mode -ne 'baseline'){
- foreach($flag in @('--spec-type','--spec-draft-n-max','--model-draft')){if(!$helpText.Contains($flag)){throw "MTP requested but $flag unsupported"}}
+ foreach($flag in @('--spec-type','--spec-draft-n-max')){if(!$helpText.Contains($flag)){throw "MTP requested but $flag unsupported"}}
 }
-$manifest=[ordered]@{binary=$LlamaServer;sha256=(Get-FileHash $LlamaServer -Algorithm SHA256).Hash;device=$Device;context=65536;cache_k='q8_0';cache_v='q8_0';flash_attention='on';models=$selected;modes=$modes;draft_n_max=$DraftNMax;repetitions=$Repeat;created=(Get-Date).ToString('o')}
+$draftFlag=if($helpText.Contains('--spec-draft-model')){'--spec-draft-model'}elseif($helpText.Contains('--model-draft')){'--model-draft'}else{''}
+if($Mode -ne 'baseline' -and (@($selected | Where-Object {$models[$_].draft}).Count -gt 0) -and !$draftFlag){throw 'Neither --spec-draft-model nor --model-draft supported'}
+$manifest=[ordered]@{binary=$LlamaServer;sha256=(Get-FileHash $LlamaServer -Algorithm SHA256).Hash;device=$Device;context=$(if($DiagnosticShortContext){4096}else{65536});cache_k='q8_0';cache_v='q8_0';flash_attention='on';models=$selected;modes=$modes;draft_n_max=$DraftNMax;repetitions=$Repeat;created=(Get-Date).ToString('o')}
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $run 'manifest.json')
 foreach($name in $selected){
  $cfg=$models[$name]
@@ -49,10 +52,15 @@ foreach($name in $selected){
   New-Item -ItemType Directory -Force -Path $caseDir | Out-Null
   $stdout=Join-Path $caseDir 'server.stdout.log'
   $stderr=Join-Path $caseDir 'server.stderr.log'
-  $argsList=@('-m',('"' + $cfg.target + '"'),'--host','127.0.0.1','--port',"$Port",'--device',$Device,'-ngl','99','-sm','none','-c','65536','--cache-type-k','q8_0','--cache-type-v','q8_0','-fa','on','-np','1','--jinja')
+  $argsList=@('-m',('"' + $cfg.target + '"'),'--host','127.0.0.1','--port',"$Port",'--device',$Device,'-ngl','99','-sm','none','-c',$(if($DiagnosticShortContext){'4096'}else{'65536'}),'--cache-type-k','q8_0','--cache-type-v','q8_0','-fa','on','-np','1','--jinja')
   if($currentMode -eq 'mtp'){
    $argsList+=@('--spec-type','draft-mtp','--spec-draft-n-max',"$DraftNMax")
-   if($cfg.draft){$argsList+=@('--model-draft',('"' + $cfg.draft + '"'))}
+   if($cfg.draft){
+    $argsList+=@($draftFlag,('"' + $cfg.draft + '"'))
+    if($helpText.Contains('--spec-draft-device')){$argsList+=@('--spec-draft-device',$Device)}
+    if($helpText.Contains('--spec-draft-ngl')){$argsList+=@('--spec-draft-ngl','99')}
+    elseif($helpText.Contains('--n-gpu-layers-draft')){$argsList+=@('--n-gpu-layers-draft','99')}
+   }
   }
   $argsList | Set-Content -Encoding utf8 (Join-Path $caseDir 'argv.txt')
   $proc=$null
