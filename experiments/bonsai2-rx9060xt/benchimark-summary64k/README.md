@@ -239,3 +239,16 @@ Output paths: `results/run_<timestamp>/<model>/THINK-02/`, `.../LCTX01/`, `.../L
 **Comparability:** input questions and strict scoring are preserved. 27B baseline's original RX9060XT/96K/K Q8 V Q4 environment is DIFFERENT from RX9070XT/64K/K Q8 V Q8, so compare answer quality within source tests, not throughput as same conditions. The ON/OFF request settings do not prove reasoning is actually toggled. Gemma12 uses default only. If full documents overflow real 64K capacity, record failure without shrinking inputs silently.
 
 **Important:** the key-to-file attribution of THINK-02 is based on the existing documented faithfulness suite; compare historical run manifests before merging scores if the two original THINK-02 sessions used different revisions of the test.
+
+
+## Qwen3.5 9B THINK-02 rerun (2026-10-15)
+
+The prior Qwen9 ON/default test reached `max_tokens=2048` on L02-L05. For a narrow rerun **without changing the test prompts or previous results**, run only Qwen9 in ON mode with 8192 generated-token budget:
+
+```powershell
+git pull --ff-only origin bench/summary-rx9070xt-64k-20261015
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\auto_run.ps1 -LlamaServer $server -Model qwen9 -LegacySuite think02 -ThinkMode on -ThinkMaxTokens 8192
+```
+
+Only the five ON cases are executed, under a fresh `results/run_YYYYMMDD_HHMMSS/qwen9/THINK-02/` folder. The L01–L05 source prompts are unchanged; the sole request change is `max_tokens: 2048 -> 8192`. Do not merge these with the old 2048-token run without distinguishing output budgets. If the answer still ends with `finish_reason=length`, document it and assess whether to retry with 16384 tokens; that is a separate condition. This setting applies only to THINK-02; Context remains 65536, KV K/V q8_0, MTP OFF and RX9070XT target. Reasoning control effectiveness still requires inspection.
