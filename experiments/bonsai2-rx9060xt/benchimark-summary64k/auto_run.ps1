@@ -8,7 +8,9 @@ param(
  [int]$StartupTimeoutSeconds=240,
  [switch]$SmokeOnly,
  [switch]$OriginalSuite,
- [ValidateSet('none','think02','lctx01','lctx02','all')][string]$LegacySuite='none'
+ [ValidateSet('none','think02','lctx01','lctx02','all')][string]$LegacySuite='none',
+ [ValidateSet('default','off','on')][string]$ThinkMode='default',
+ [int]$ThinkMaxTokens=2048
 )
 $ErrorActionPreference='Stop'
 if (!(Test-Path -LiteralPath $LlamaServer -PathType Leaf)) {throw "Executable not found: $LlamaServer"}
@@ -76,7 +78,9 @@ foreach ($name in $selected) {
    $requestedSuites=if ($LegacySuite -eq 'all') {@('think02','lctx01','lctx02')} else {@($LegacySuite)}
    foreach ($legacy in $requestedSuites) {
     if ($legacy -eq 'think02') {
-     & python experiments/bonsai2-rx9060xt/benchimark-summary64k/run_original_suite.py --model $name --suite long --base-url "http://127.0.0.1:$Port" --output (Join-Path $modelDir 'THINK-02') --flat-output $(if ($SmokeOnly) {'--smoke'})
+     $extra=@()
+     if ($ThinkMode -ne 'default') {$extra+=@('--modes',$ThinkMode)}
+     & python experiments/bonsai2-rx9060xt/benchimark-summary64k/run_original_suite.py --model $name --suite long --base-url "http://127.0.0.1:$Port" --output (Join-Path $modelDir 'THINK-02') --flat-output --max-tokens $ThinkMaxTokens @extra $(if ($SmokeOnly) {'--smoke'})
     } else {
      & python experiments/bonsai2-rx9060xt/benchimark-summary64k/run_lctx_legacy.py --suite $legacy --base-url "http://127.0.0.1:$Port" --output (Join-Path $modelDir $legacy.ToUpperInvariant())
     }
