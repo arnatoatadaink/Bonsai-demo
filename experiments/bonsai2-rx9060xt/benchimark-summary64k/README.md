@@ -271,3 +271,22 @@ python experiments/bonsai2-rx9060xt/benchimark-summary64k/speed_probe.py --label
 No MTP availability is inferred from directory names containing `MTP`. With unsupported heads or model metadata, do not report an MTP gain. Compare per-case median tg_tok_s and total time, quality/finish reasons, prompt tokens, backend logs, accepted draft-token rate and VRAM. Compute gain = MTP / baseline for TG, or baseline_time / MTP_time for latency. Test n-max 1/3/5 only **after** establishing MTP actually activates; store each configuration separately. Qwen3.5-9B, Bonsai8, Gemma4-12B, Bonsai2-27B and Gemma4-26B have different compatibility; only confirmed supported configurations are eligible for an MTP-on measurement. Official Bonsai2-27B DSpark is not released as of this check; DSpark is a different draft mechanism from MTP.
 
 As a first comparison, the probe uses Think OFF requests where supported to reduce hidden reasoning variability. A subsequent Think ON speed run needs identical max token and thought settings on both decoding modes. The benchmark intentionally does not change existing THINK/LCTX result files.
+
+
+## Model-specific MTP startup (2026-10-15)
+
+`start_mtp_speed.ps1` explicitly selects RX9070XT by local `--list-devices`, pins context 65536 / K,V q8_0, and allows `-Mode baseline` vs `-Mode mtp`. Targets: Qwen3.5 9B embedded NextN (no separate drafter); Gemma4 12B and 26B A4B QAT separate Q8_0 draft files. Check Gemma12 QAT target vs non-QAT assistant compatibility in runtime before trusting it.
+
+```powershell
+$server = "D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"
+# Terminal 1: baseline, then Ctrl+C after benchmark
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\start_mtp_speed.ps1 -LlamaServer $server -Model qwen9 -Mode baseline
+# Terminal 2:
+python experiments/bonsai2-rx9060xt/benchimark-summary64k/speed_probe.py --label qwen9_baseline --output experiments/bonsai2-rx9060xt/benchimark-summary64k/results/qwen9_baseline
+# Terminal 1: restart target in MTP mode
+.\experiments\bonsai2-rx9060xt\benchimark-summary64k\start_mtp_speed.ps1 -LlamaServer $server -Model qwen9 -Mode mtp -DraftNMax 4
+# Terminal 2: run same probe, separate results:
+python experiments/bonsai2-rx9060xt/benchimark-summary64k/speed_probe.py --label qwen9_mtp4 --output experiments/bonsai2-rx9060xt/benchimark-summary64k/results/qwen9_mtp4
+```
+
+Replace `qwen9` with `gemma12` or `gemma26` for corresponding model and MTP pair. A successful process launch does not establish MTP activation: verify speculative initialization, draft accepted rate and that selected Vulkan GPU is RX9070XT. Baseline and MTP must use the same backend binary and model path. Keep separate timing runs and note GPU memory pressure. These examples do not auto-start or stop the speed probe.
