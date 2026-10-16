@@ -19,7 +19,12 @@ $ids=@($devices -split '\r?\n'|Where-Object {$_ -match 'RX\s*9070\s*XT'}|ForEach
 if($ids.Count -ne 1){throw "RX9070XT GPU ambiguity; inspect $run/devices.txt"}
 $device=$ids[0]
 if(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue){throw "Port $Port is busy"}
-(& $exe --version 2>&1|Out-String)|Set-Content -Encoding UTF8 (Join-Path $run 'version.txt')
+# PowerShell 5.1 promotes native stderr to a terminating error under Stop.
+# Capture version output with a child process instead of 2>&1.
+$versionOut=Join-Path $run 'version.stdout.txt'
+$versionErr=Join-Path $run 'version.stderr.txt'
+$verProc=Start-Process -FilePath $exe -ArgumentList '--version' -PassThru -Wait -RedirectStandardOutput $versionOut -RedirectStandardError $versionErr
+if($verProc.ExitCode -ne 0){Write-Warning "llama-server --version exit=$($verProc.ExitCode); see version.stderr.txt"}
 $manifest=[ordered]@{
  model=$model;model_sha256=(Get-FileHash -LiteralPath $model -Algorithm SHA256).Hash
  binary=$exe;binary_sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
