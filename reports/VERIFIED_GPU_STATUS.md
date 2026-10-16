@@ -32,3 +32,22 @@ Other-model comparisons are out of scope for this reporting branch.
 - ASUS board manual: https://dlcdnets.asus.com/pub/ASUS/mb/SocketAM4/TUF_GAMING_B550-PLUS/J16576_TUF_GAMING_B550-PLUS_UM_WEB.pdf
 
 **Reporting interpretation:** PP should be classified as *environment-dependent, not an established intrinsic GPU comparison*. RX9060XT is deliberately restricted to PCIe 3.0 x1 to secure USB bandwidth; distinguish the standard 8x theoretical difference (PCIe 4.0 x16 versus PCIe 3.0 x4) from the active configuration's 32x theoretical link-bandwidth difference (PCIe 4.0 x16 versus PCIe 3.0 x1). The observed PP ratio of approximately 16.84x is neither of those theoretical ratios and remains confounded by benchmarking conditions and residency.
+
+
+## AMD official GPU specifications (reviewed 2026-10-16)
+
+| Metric | RX 9070 XT | RX 9060 XT 16 GB | Ratio |
+|---|---:|---:|---:|
+| VRAM capacity | 16 GB | 16 GB | 1.00 |
+| VRAM bandwidth | 640 GB/s | 320 GB/s | 2.00 |
+| Bus width | 256-bit | 128-bit | 2.00 |
+| Compute Units | 64 | 32 | 2.00 |
+| Stream processors | 4096 | 2048 | 2.00 |
+| AI accelerators | 128 | 64 | 2.00 |
+| Infinity Cache | 64 MB | 32 MB | 2.00 |
+| Peak FP32 | 48.7 TFLOPS | 25.6 TFLOPS | 1.90 |
+| Game clock | 2400 MHz | 2530 MHz | 0.95 |
+
+Sources: [AMD RX 9070 XT](https://www.amd.com/ja/products/graphics/desktops/radeon/9000-series/amd-radeon-rx-9070xt.html), [AMD RX 9060 XT](https://www.amd.com/ja/products/graphics/desktops/radeon/9000-series/amd-radeon-rx-9060xt.html).
+
+**Interpretation:** On-chip GPU resources are roughly 2x, with exactly 2x *rated* VRAM bandwidth at equal capacity. The measured Bonsai2 TG ratio 56.60 / 29.83 ~1.90 is consistent with a ~2x hardware tier but is not a controlled comparison. The measured PP ratio is *not* a pure GPU comparison because the RX9060XT secondary slot is user-configured PCIe 3.0 x1, while the RX9070XT is in the primary slot (PCIe 4.0 x16). Other measurement conditions must also be matched.
