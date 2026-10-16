@@ -9,11 +9,11 @@
 | **RX 9070 XT** | **743.67 t/s** | **56.60 t/s** | Verified |
 | **RX 9060 XT** | **44.16 t/s** | **29.83 t/s** | Verified, historical run |
 
-※ **RX 9060 XTのPP低速はPCIe 3.0 x1環境に由来する可能性があります。**
+**Note:** The RX 9060 XT's unusually low PP may be related to its PCIe 3.0 x1 connection.
 
 Numbers come from different workloads; they are not a controlled same-condition comparison. **All Windows installation and test commands below target Windows PowerShell 5.1.**
 
-## 1. 環境設定
+## 1. Test Environment
 
 | Item | Tested configuration |
 |---|---|
@@ -45,7 +45,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 The Vulkan runtime comes with a compatible AMD GPU driver. A Vulkan SDK is **not required merely to run** prebuilt llama.cpp. The repository-wide setup.ps1 auto-detects a backend and might select HIP or CPU, so the following instructions explicitly install the fixed Vulkan release.
 
-## 3. 参照した llama.cpp と導入コマンド
+## 3. llama.cpp Source and Installation
 
 Source: [PrismML-Eng/llama.cpp](https://github.com/PrismML-Eng/llama.cpp). Pinned release: [prism-b10772-e8fd209](https://github.com/PrismML-Eng/llama.cpp/releases/tag/prism-b10772-e8fd209).
 
@@ -76,7 +76,7 @@ Test-Path $server
 
 These asset names follow the repository setup.ps1 at the pinned tag. Check availability, DLL placement, and --list-devices on the new machine; the packaged binary has not been validated there yet.
 
-## 4. 参照したモデルと導入コマンド
+## 4. Model Source and Installation
 
 Model: [prism-ml/Ternary-Bonsai-2-27B-gguf](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf), **PQ2_0**, tested model size 7,206,168,928 bytes.
 
@@ -95,7 +95,7 @@ Get-Item $gguf | Select-Object FullName,Length
 
 Image input is not used for this text-only benchmark; mmproj is optional. Existing tested model location was D:\lmstudio_models\prism-ml\Ternary-Bonsai-2-27B-gguf\Ternary-Bonsai-2-27B-PQ2_0.gguf.
 
-## 5. 起動・動作確認方法
+## 5. Launch and Verification
 
 The actual Vulkan device indices vary by PC: use --list-devices before choosing the ID. Start one GPU server at a time, without MTP.
 
@@ -124,7 +124,7 @@ Stop that server before the automated single-run RX9070XT performance probe:
 
 That script is RX9070XT-only. Do not use it to claim RX9060XT measurements.
 
-## 6. 動作証跡・速度
+## 6. Evidence and Performance
 
 | GPU | Context | Prompt tokens | Generated tokens | PP t/s | TG t/s |
 |---|---:|---:|---:|---:|---:|
