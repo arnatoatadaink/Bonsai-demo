@@ -17,3 +17,16 @@ Evidence archive: `bonsai2_rx9070xt_20261016_144533.zip` provided by user (not s
 - Power profile from user-supplied `RX9070XT_UD65.xml`: power limit -30% enabled; -65 mV and -500 clock offset saved but their respective XML state enable flags false.
 
 Other-model comparisons are out of scope for this reporting branch.
+
+
+## Motherboard and PCIe topology (user-confirmed, 2026-10-16)
+
+- Motherboard: **ASUS TUF GAMING B550-PLUS** (non-Wi-Fi model).
+- CPU: **AMD Ryzen 7 5700X**.
+- GPU placement: **RX 9070 XT in main slot**; **RX 9060 XT in secondary slot**, each 16 GB.
+- Per ASUS product specification: main PCIEX16_1 (CPU-attached) supports **PCIe 4.0 x16** with Ryzen 5000; secondary PCIEX16_2 (B550 chipset-attached) supports **PCIe 3.0 x4 maximum**. When a PCIEX1 slot is in use, ASUS manual says PCIEX16_2 shares lanes and drops to **x1**. The actual *negotiated* link width is not yet measured.
+- Nominal one-way peak bandwidth: PCIe 4.0 x16 ~31.5 GB/s; PCIe 3.0 x4 ~3.94 GB/s (8x nominal ratio); PCIe 3.0 x1 ~0.985 GB/s (32x ratio).
+- Historical RX9060XT PP 44.16 t/s vs RX9070XT PP 743.67 t/s are **not matched-condition results**; the apparent 16.84x PP ratio cannot be attributed directly to PCIe bandwidth. PCIe mainly matters for transfers/CPU offload/multi-GPU; if the working set is GPU resident, arithmetic and VRAM access are key. Avoid making an unverified PCIe bottleneck claim.
+- To compare fairly: capture PCIe negotiated link speed/width under load, GPU and CPU layer split, whether all weights and KV are in VRAM, `n_batch`, `n_ubatch`, context, prompt length, cache-hit state, PP timing, and GPU power/clock. Compare identical GGUF, llama.cpp build, drivers, and prompt on each GPU.
+- ASUS specs: https://www.asus.com/jp/motherboards-components/motherboards/all-series/tuf-gaming-b550-plus/techspec/
+- ASUS board manual: https://dlcdnets.asus.com/pub/ASUS/mb/SocketAM4/TUF_GAMING_B550-PLUS/J16576_TUF_GAMING_B550-PLUS_UM_WEB.pdf
