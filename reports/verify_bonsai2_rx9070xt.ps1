@@ -37,7 +37,7 @@ $stderr=Join-Path $run 'server.stderr.log'
 $stdout=Join-Path $run 'server.stdout.log'
 $argsList=@('-m',('"'+$model+'"'),'--host','127.0.0.1','--port',"$Port",
  '--device',$device,'-ngl','99','-sm','none','-c',"$Context",
- '--cache-type-k','q8_0','--cache-type-v','q8_0','-fa','on','-np','1')
+ '--cache-type-k','q8_0','--cache-type-v','q8_0','-fa','on','-np','1','--jinja')
 ($argsList -join ' ')|Set-Content -Encoding UTF8 (Join-Path $run 'command.txt')
 $proc=$null
 try{
@@ -54,17 +54,22 @@ try{
  $meta|ConvertTo-Json -Depth 8|Set-Content -Encoding UTF8 (Join-Path $run 'models.json')
  $records=(1..120|ForEach-Object {('Record {0}: quarter {1}; units {2}; approved {3}.' -f $_,(($_ % 4)+1),($_*3),($_ % 3 -eq 0))}) -join [Environment]::NewLine
  $prompt="Summarize the quarterly counts and exceptions from these audit records in Japanese:" + [Environment]::NewLine + $records
- $body=@{prompt=$prompt;n_predict=$MaxTokens;temperature=0.7;top_k=20;top_p=0.8;stream=$false}
- $payload=$body|ConvertTo-Json -Depth 6
+ $body=@{messages=@(@{role='system';content='You are a helpful assistant.'},@{role='user';content=$prompt});max_tokens=$MaxTokens;temperature=1.0;top_k=20;top_p=0.95;stream=$false;reasoning_effort='medium'}
+ $payload=$body|ConvertTo-Json -Depth 8
  $payload|Set-Content -Encoding UTF8 (Join-Path $run 'request.json')
- $res=Invoke-RestMethod -Uri "http://127.0.0.1:$Port/completion" -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($payload)) -ContentType 'application/json; charset=utf-8' -TimeoutSec 900
+ $res=Invoke-RestMethod -Uri "http://127.0.0.1:$Port/v1/chat/completions" -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($payload)) -ContentType 'application/json; charset=utf-8' -TimeoutSec 900
  $res|ConvertTo-Json -Depth 30|Set-Content -Encoding UTF8 (Join-Path $run 'response.json')
  $time=$res.timings
  $pp=$time.prompt_per_second;$tg=$time.predicted_per_second
- $summary=[ordered]@{device=$device;model=$model;pp_tok_s=$pp;tg_tok_s=$tg;prompt_tokens=$res.tokens_evaluated;generated_tokens=$res.tokens_predicted;stop_type=$res.stop_type;log_dir=$run}
+ $inTokens=$res.usage.prompt_tokens;$outTokens=$res.usage.completion_tokens
+ $choice=$res.choices[0]
+ $answer=[string]$choice.message.content
+ $reason=[string]$choice.message.reasoning_content
+ $status=if($outTokens -ge 32 -and $tg -gt 0 -and ($answer.Length -gt 0 -or $reason.Length -gt 0)){'PASS'}else{'INCOMPLETE'}
+ $summary=[ordered]@{status=$status;device=$device;model=$model;pp_tok_s=$pp;tg_tok_s=$tg;prompt_tokens=$inTokens;generated_tokens=$outTokens;finish_reason=$choice.finish_reason;answer_chars=$answer.Length;reasoning_chars=$reason.Length;log_dir=$run}
  $summary|ConvertTo-Json -Depth 5|Set-Content -Encoding UTF8 (Join-Path $run 'summary.json')
- if($null -eq $pp -or $null -eq $tg){throw "No PP/TG timings; inspect response.json"}
- Write-Host ("Bonsai2 / {0}: PP={1} tokens/s, TG={2} tokens/s" -f $device,$pp,$tg)
+ if($status -ne 'PASS'){throw "No sustained text generation: tokens=$outTokens TG=$tg finish=$($choice.finish_reason); inspect response.json"}
+ Write-Host ("Bonsai2 / {0}: PP={1} tokens/s, TG={2} tokens/s, generated={3}" -f $device,$pp,$tg,$outTokens)
  Write-Host "Results: $run"
 }finally{
  if($proc){$proc.Refresh();if(!$proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue;try{$proc.WaitForExit(10000)|Out-Null}catch{}}}
