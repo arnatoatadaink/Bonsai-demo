@@ -4,14 +4,14 @@
 
 **Bonsai 2 27B PQ2_0 works on both RX 9060 XT and RX 9070 XT with PrismML llama.cpp / Vulkan.**
 
-| GPU (16 GB) | PP | TG | Status |
-|---|---:|---:|---|
-| **RX 9070 XT** | **743.67 t/s** | **56.60 t/s** | Verified |
-| **RX 9060 XT** | **44.16 t/s** | **29.83 t/s** | Verified, historical run |
+| GPU (16 GB) | PP | TG |
+|---|---:|---:|
+| **RX 9070 XT** | **743.67 t/s** | **56.60 t/s** |
+| **RX 9060 XT** | **44.16 t/s** | **29.83 t/s** |
 
 **Note:** The RX 9060 XT's unusually low PP may be related to its PCIe 3.0 x1 connection.
 
-Numbers come from different workloads; they are not a controlled same-condition comparison. **All Windows installation and test commands below target Windows PowerShell 5.1.**
+**Separate test runs; not a controlled comparison. Tested on Windows 11 using Windows PowerShell 5.1.**
 
 ## 1. Test Environment
 
@@ -20,11 +20,11 @@ Numbers come from different workloads; they are not a controlled same-condition 
 | OS / Shell | Windows 11 Pro x64 / **Windows PowerShell 5.1** |
 | CPU / RAM | AMD Ryzen 7 5700X / 32 GB |
 | Motherboard | ASUS TUF GAMING B550-PLUS |
-| Main GPU | RX 9070 XT 16GB, primary PCIe 4.0 x16 slot (Vulkan1 at test time) |
-| Secondary GPU | RX 9060 XT 16GB, PCIe 3.0 x1 configured for USB bandwidth (Vulkan0) |
+| Main GPU | RX 9070 XT 16GB, primary PCIe 4.0 x16 slot |
+| Secondary GPU | RX 9060 XT 16GB, secondary PCIe 3.0 x1 slot |
 | Driver | AMD Adrenalin **26.3.1** |
 | Engine | PrismML llama.cpp **build 10772**, commit **e8fd209c9**, Vulkan |
-| Power profile | RX9070XT power limit -30%; offsets -65 and -500 are saved but not marked enabled in XML |
+| GPU power | RX 9070 XT configured -30% power limit |
 
 ```powershell
 $PSVersionTable.PSVersion
@@ -49,16 +49,24 @@ The Vulkan runtime comes with a compatible AMD GPU driver. A Vulkan SDK is **not
 
 Source: [PrismML-Eng/llama.cpp](https://github.com/PrismML-Eng/llama.cpp). Pinned release: [prism-b10772-e8fd209](https://github.com/PrismML-Eng/llama.cpp/releases/tag/prism-b10772-e8fd209).
 
-The measured PC used a **locally built binary** in D:\AI\PrismML\dev\llama.cpp\build-vulkan-ucrt64\bin; the following commands install the matching published release series, not an identical SHA256 executable.
+The benchmark used a locally built binary from the pinned source commit. The following commands install the published release instead; binary hashes may differ.
 
 ```powershell
-$work = "D:\AI\PrismML\dev"  # Change this directory on another machine.
+$work = Join-Path $HOME "Bonsai-test"
 New-Item -ItemType Directory -Force $work | Out-Null
 Set-Location $work
-git clone https://github.com/arnatoatadaink/Bonsai-demo.git
+if (-not (Test-Path ".\Bonsai-demo\.git")) {
+  if (Test-Path ".\Bonsai-demo") { throw "Bonsai-demo exists but is not a Git repository." }
+  git clone https://github.com/arnatoatadaink/Bonsai-demo.git
+  if ($LASTEXITCODE -ne 0) { throw "Git clone failed." }
+}
 Set-Location .\Bonsai-demo
 git fetch origin
+if ($LASTEXITCODE -ne 0) { throw "Git fetch failed." }
 git switch reports/bonsai2-27b-rx9070xt-20261016
+if ($LASTEXITCODE -ne 0) { throw "Git switch failed." }
+git pull --ff-only origin reports/bonsai2-27b-rx9070xt-20261016
+if ($LASTEXITCODE -ne 0) { throw "Git pull failed." }
 $tag = "prism-b10772-e8fd209"
 $base = "https://github.com/PrismML-Eng/llama.cpp/releases/download/$tag"
 $dest = Join-Path (Get-Location) "bin\vulkan"
@@ -67,14 +75,15 @@ $cpuZip = Join-Path $env:TEMP "bonsai-llama-cpu.zip"
 $vkZip = Join-Path $env:TEMP "bonsai-llama-vulkan.zip"
 Invoke-WebRequest -UseBasicParsing -Uri "$base/llama-$tag-bin-win-cpu-x64.zip" -OutFile $cpuZip
 Invoke-WebRequest -UseBasicParsing -Uri "$base/llama-$tag-bin-win-vulkan-x64.zip" -OutFile $vkZip
+if (-not (Test-Path $cpuZip) -or -not (Test-Path $vkZip)) { throw "Binary download failed." }
 Expand-Archive -LiteralPath $cpuZip -DestinationPath $dest -Force
 Expand-Archive -LiteralPath $vkZip -DestinationPath $dest -Force
 $server = Join-Path $dest "llama-server.exe"
-Test-Path $server
+if (-not (Test-Path $server)) { throw "llama-server.exe was not found after extraction." }
 & $server --list-devices
 ```
 
-These asset names follow the repository setup.ps1 at the pinned tag. Check availability, DLL placement, and --list-devices on the new machine; the packaged binary has not been validated there yet.
+The archive filenames follow the repository setup.ps1. If device detection fails, check the AMD driver and DLLs. This binary has not yet been validated on the second PC.
 
 ## 4. Model Source and Installation
 
@@ -89,11 +98,14 @@ New-Item -ItemType Directory -Force $modelDir | Out-Null
 $hf = Join-Path (Get-Location) ".venv\Scripts\hf.exe"
 & $hf download prism-ml/Ternary-Bonsai-2-27B-gguf --include "*-PQ2_0.gguf" --local-dir $modelDir
 $gguf = (Get-ChildItem -LiteralPath $modelDir -Filter "*-PQ2_0.gguf" -File | Select-Object -First 1).FullName
-Test-Path $gguf
-Get-Item $gguf | Select-Object FullName,Length
+if (-not $gguf -or -not (Test-Path $gguf)) { throw "Model download failed." }
+$expectedSha = "3907DC1658DB1F78A9826BF8D5BCB8DC65DB0D466388937AF57F2294FAE62EC1"
+$actualSha = (Get-FileHash -LiteralPath $gguf -Algorithm SHA256).Hash
+if ($actualSha -ne $expectedSha) { throw "Model SHA256 does not match the benchmarked GGUF; check model revision." }
+Get-Item $gguf | Select-Object Name,Length
 ```
 
-Image input is not used for this text-only benchmark; mmproj is optional. Existing tested model location was D:\lmstudio_models\prism-ml\Ternary-Bonsai-2-27B-gguf\Ternary-Bonsai-2-27B-PQ2_0.gguf.
+Image input is not used in this text-only test; mmproj is optional.
 
 ## 5. Launch and Verification
 
@@ -101,7 +113,7 @@ The actual Vulkan device indices vary by PC: use --list-devices before choosing 
 
 ```powershell
 & $server --list-devices
-$device = "Vulkan1" # Set to the RX 9070 XT device reported on THIS PC.
+$device = "Vulkan1" # EXAMPLE ONLY: replace with the ID listed for your GPU.
 & $server -m $gguf --host 127.0.0.1 --port 18081 --device $device -ngl 99 -sm none -c 4096 --cache-type-k q8_0 --cache-type-v q8_0 -fa on -np 1 --jinja
 ```
 
@@ -116,13 +128,16 @@ $r.choices[0].message
 $r.timings | Format-List
 ```
 
-Stop that server before the automated single-run RX9070XT performance probe:
+Stop the server (Ctrl+C) before running the automated benchmark in a PowerShell window **where $server and $gguf have been defined**. If opening another session, rerun the path assignments shown below:
 
 ```powershell
-.\reports\verify_bonsai2_rx9070xt.ps1 -ModelPath $gguf -LlamaServer $server -Context 4096 -MaxTokens 2048
+Set-Location (Join-Path $HOME "Bonsai-test\Bonsai-demo")
+$server = Join-Path (Get-Location) "bin\vulkan\llama-server.exe"
+$gguf = (Get-ChildItem ".\models\bonsai2-gguf\27B" -Filter "*-PQ2_0.gguf" -File | Select-Object -First 1).FullName
+.\reports\verify_bonsai2_rx9070xt.ps1 -ModelPath $gguf -LlamaServer $server -GpuName "RX 9070 XT" -Context 4096 -MaxTokens 2048
 ```
 
-That script is RX9070XT-only. Do not use it to claim RX9060XT measurements.
+For RX 9060 XT, change `-GpuName` to `"RX 9060 XT"`. Benchmark results from each GPU should be saved separately and compared only after matching all settings.
 
 ## 6. Evidence and Performance
 
@@ -131,20 +146,14 @@ That script is RX9070XT-only. Do not use it to claim RX9060XT measurements.
 | RX 9070 XT | **4,096** | **2,292** | **1,804** | **743.67** | **56.60** |
 | RX 9060 XT (historical) | Not reconciled | Not reconciled | Not reconciled | 44.16 | 29.83 |
 
-**No context-length sweep has been recorded for Bonsai2-27B on RX9070XT.** Do not infer 8K/32K/64K throughput from the 4K run. The chart below shows the only available TG comparison (different measurement conditions):
+**No context-length sweep has been recorded for Bonsai2-27B on RX9070XT.** Do not infer 8K/32K/64K throughput from the 4K run. A context-length performance graph will be added only when multiple measured contexts are available.
 
-```mermaid
-xychart-beta
-    title "Bonsai2-27B TG (tokens/s): historical runs"
-    x-axis ["RX9060XT", "RX9070XT"]
-    y-axis "tokens/s" 0 --> 60
-    bar [29.83, 56.60]
-```
+
 
 RX9070XT timing detail: PP 2,292 tokens / 3,082.014 ms; TG 1,804 tokens / 31,857.099 ms. Completion ended at 4,096 tokens combined (finish_reason=length); sustained reasoning-token generation was verified, **not completed final-answer output**.
 
 Original evidence archive: bonsai2_rx9070xt_20261016_144533.zip (user-provided, not committed). Model SHA256: 3907DC1658DB1F78A9826BF8D5BCB8DC65DB0D466388937AF57F2294FAE62EC1. Measured local-binary SHA256: 1BF104B2C3274899EF20BA92AFFDBBDAFB6CFD0903621C2492E702A284D16FEE.
 
-**PCIe note:** B550-PLUS primary CPU PCIe 4.0 x16 vs secondary configured chipset PCIe 3.0 x1 (USB bandwidth preservation). PP difference may be environment-specific, not intrinsic GPU performance. RX9070XT VRAM bandwidth 640 GB/s, RX9060XT 320 GB/s. RX9060XT TG ~29.83 vs RX9070XT ~56.60 t/s cannot establish exact GPU scaling without matching test conditions.
+**PCIe note:** RX 9060 XT runs in the PCIe 3.0 x1 secondary slot to preserve USB bandwidth. The unusual PP gap is environment-dependent and cannot establish an intrinsic GPU speed ratio.
 
-Power XML: -30% power limit enabled; saved -65 / -500 offsets have state disabled. Detailed GPU provenance: [VERIFIED_GPU_STATUS.md](VERIFIED_GPU_STATUS.md). Gemma/Qwen comparisons and MTP stability are deliberately excluded.
+Power XML: -30% limit enabled; -65 mV and -500 MHz offsets saved but not enabled. Detailed provenance: [VERIFIED_GPU_STATUS.md](VERIFIED_GPU_STATUS.md). Gemma/Qwen comparisons and MTP stability are deliberately excluded.
