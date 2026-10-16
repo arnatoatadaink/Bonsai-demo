@@ -1,4 +1,4 @@
-# Bonsai 2 27B — Windows 11 / Radeon RX 9060 XT・9070 XT
+# Bonsai 2 27B — Windows 11 / Radeon RX 9060 XT / RX 9070 XT
 
 ## TL;DR
 
