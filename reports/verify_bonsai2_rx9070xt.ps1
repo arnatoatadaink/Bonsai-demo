@@ -20,9 +20,9 @@ $deviceProc=Start-Process -FilePath $exe -ArgumentList '--list-devices' -Wait -P
 if($deviceProc.ExitCode -ne 0){throw 'Device discovery failed; inspect devices.stderr.txt'}
 $devices=(Get-Content -Raw $deviceOut)+(Get-Content -Raw $deviceErr)
 $devices|Set-Content -Encoding UTF8 (Join-Path $run 'devices.txt')
-$gpuPattern=[regex]::Escape($GpuName) -replace '\\ ', '\\s*'
+$gpuPattern=(($GpuName -split '\s+') | ForEach-Object {[regex]::Escape($_)}) -join '\s*'
 $ids=@($devices -split '\r?\n'|Where-Object {$_ -match $gpuPattern}|ForEach-Object {if($_ -match '\b(Vulkan\d+)\b'){$Matches[1]}}|Select-Object -Unique)
-if($ids.Count -ne 1){throw "GPU selection not unique for $GpuName; inspect $run/devices.txt"}
+if($ids.Count -ne 1){throw "GPU selection not unique for $GpuName; inspect $run/devices.stdout.txt and devices.stderr.txt"}
 $device=$ids[0]
 if(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue){throw "Port $Port is busy"}
 # PowerShell 5.1 promotes native stderr to a terminating error under Stop.
