@@ -12,6 +12,17 @@ Measure prompt-processing throughput versus logical batch (`-b`) and microbatch 
 ```powershell
 pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\test_bonsai2_pp_rx9060xt.ps1 -Mode quick -ModelPath "<model.gguf>" -BenchPath "<llama-bench.exe>" -Device Vulkan0
 ```
+For the existing Windows setup, take the actual GGUF and binary paths from the local `llama_bonsai2.ps1` launcher; the path of `llama-bench.exe` should be checked in the **same bin folder** as its `llama-server.exe`. The angle-bracket placeholders above are documentation markers, **not executable paths**. Before running, define real PowerShell variables and verify both files:
+
+```powershell
+# Set these two paths using the local llama_bonsai2.ps1 launcher.
+$model = '<actual-path-to-Bonsai2-PQ2_0-MTP-Q8_0.gguf>'
+$bench = '<same-bin-directory-as-llama-server.exe>\\llama-bench.exe'
+if (-not (Test-Path -LiteralPath $model -PathType Leaf)) { throw 'GGUF missing' }
+if (-not (Test-Path -LiteralPath $bench -PathType Leaf)) { throw 'Matching llama-bench.exe missing; build it with the PrismML fork' }
+pwsh -NoProfile -File .\\experiments\\bonsai2-rx9060xt\\runner\\test_bonsai2_pp_rx9060xt.ps1 -Mode quick -ModelPath $model -BenchPath $bench -Device Vulkan0
+```
+
 Change `-Mode` to `extended` (36 cases) or `stress` (16 cases) only after quick succeeds.
 
 | Mode | Logical batches | Physical microbatches | PP lengths |
