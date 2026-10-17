@@ -17,6 +17,17 @@ pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96
 
 Results go to \`experiments/bonsai2-rx9060xt/pp-batch-v01/results/run_YYYYMMDD_HHMMSS_ctx96k_pp32k_auto/\`. Each run keeps a manifest, top-level summary CSV, and per-case folder with logs and nested trial results. No real measurements have been executed by the assistant.
 
+## Power-of-two downward sweep (2026-10-18)
+
+Run this **next**, without modifying the existing baseline or quick modes:
+
+```powershell
+ git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+ pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode downshift
+```
+
+The four configurations are **batch 16384 / 32768** × **ubatch 256 / 512**. Thus the earlier winning (32768,512) is remeasured alongside the new (16384,256) combination; each has 3 trials, 12 total. Batch 16384 is smaller than the 32768-token input and intentionally forces logical batching across the prompt. If the downshift is favorable, `-Mode downshift-extended` covers batch **8192 / 16384 / 32768** × ubatch **128 / 256 / 512** (9 configurations, 27 trials). These are separate runs and no measurements are asserted here.
+
 ## Manual server mode (alternative)
 
 ## Dataset selection
