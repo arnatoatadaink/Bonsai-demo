@@ -3,7 +3,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)][string]$InputPath,
-  [string]$ServerUrl = "http://127.0.0.1:8080",
+  [string]$ServerUrl = "http://127.0.0.1:8078",
   [int]$ContextSize = 98304,
   [int]$PromptTokens = 32768,
   [ValidateSet("quick","extended")][string]$Mode = "quick",
