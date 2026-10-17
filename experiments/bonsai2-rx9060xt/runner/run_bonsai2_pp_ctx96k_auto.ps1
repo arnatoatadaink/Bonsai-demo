@@ -1,7 +1,7 @@
 # Automated 96k context / 32k PP test; PowerShell 7.
 param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
- [ValidateSet("baseline","quick","extended")][string]$Mode="baseline",
+ [ValidateSet("baseline","quick","extended","downshift","downshift-extended")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [int]$Repetitions=3,
  [int]$TimeoutSec=360, [string]$OutputDir=""
 )
@@ -19,6 +19,8 @@ switch($Mode){
  "baseline" {$bs=@(32768);$ubs=@(512)}
  "quick" {$bs=@(32768,65536);$ubs=@(512,1024,1536)}
  "extended" {$bs=@(32768,65536,131072);$ubs=@(512,1024,1536,2048)}
+ "downshift" {$bs=@(16384,32768);$ubs=@(256,512)}
+ "downshift-extended" {$bs=@(8192,16384,32768);$ubs=@(128,256,512)}
 }
 $out=Join-Path $OutputDir ("run_"+(Get-Date -Format "yyyyMMdd_HHmmss")+"_ctx96k_pp32k_auto")
 New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -28,6 +30,7 @@ $metadata=[ordered]@{
  input_sha256=(Get-FileHash $InputPath -Algorithm SHA256).Hash
  mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions
  kv="K Q8_0 / V Q4_0";flash_attention="on";mtp="off";parallel=1
+ batch_values=$bs;ubatch_values=$ubs;order="ascending batch then ascending ubatch"
 }
 $metadata|ConvertTo-Json|Set-Content (Join-Path $out "manifest.json")
 $rows=@()
