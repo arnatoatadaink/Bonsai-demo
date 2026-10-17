@@ -33,9 +33,12 @@ if ([string]::IsNullOrWhiteSpace($text)) { throw "Input file is empty" }
 function Tokenize([string]$value) {
   $body=@{content=$value;add_special=$false} | ConvertTo-Json -Compress -Depth 4
   $r=Invoke-RestMethod -Uri "$base/tokenize" -Method Post -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 900
-  return ,@($r.tokens)
+  if ($null -eq $r.tokens) { throw "Tokenizer response missing tokens array" }
+  # Emit each token rather than a nested array: PowerShell unary comma would make Count=1.
+  foreach ($token in $r.tokens) { [int]$token }
 }
-$ids=@(Tokenize $text)
+$ids=[int[]]@(Tokenize $text)
+$originalTokenCount=$ids.Count
 if ($ids.Count -lt $PromptTokens -and -not $RepeatInput) {
   throw "Only $($ids.Count) tokens in dataset, less than requested $PromptTokens. Supply a longer text or explicitly use -RepeatInput."
 }
@@ -46,7 +49,7 @@ if ($RepeatInput -and $ids.Count -lt $PromptTokens) {
 $ids=@($ids | Select-Object -First $PromptTokens)
 if ($ids.Count -ne $PromptTokens) { throw "Failed to prepare requested token count" }
 $hash=(Get-FileHash -LiteralPath $InputPath -Algorithm SHA256).Hash
-$metadata=[ordered]@{input_file=[IO.Path]::GetFileName($InputPath);input_sha256=$hash;input_original_tokens=$ids.Count;prompt_tokens=$PromptTokens;context_expected=$ContextSize;context_reported=$ctx;server=$base;mode=$Mode;repetitions=$Repetitions;repeat_input=$RepeatInput.IsPresent;warning="Server startup parameters -c 98304 -np 1 and cache behavior must be verified via log. Restart server between configurations; repeated runs may be cache-affected."}
+$metadata=[ordered]@{input_file=[IO.Path]::GetFileName($InputPath);input_sha256=$hash;input_original_tokens=$originalTokenCount;prompt_tokens=$PromptTokens;context_expected=$ContextSize;context_reported=$ctx;server=$base;mode=$Mode;repetitions=$Repetitions;repeat_input=$RepeatInput.IsPresent;warning="Server startup parameters -c 98304 -np 1 and cache behavior must be verified via log. Restart server between configurations; repeated runs may be cache-affected."}
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runDir "metadata.json") -Encoding utf8
 $rows=@()
 for ($i=1;$i -le $Repetitions;$i++) {
