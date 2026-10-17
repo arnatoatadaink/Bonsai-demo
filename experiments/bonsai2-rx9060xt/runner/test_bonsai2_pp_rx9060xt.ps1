@@ -6,9 +6,13 @@ param(
   [string]$Device = "Vulkan0",
   [ValidateSet("quick","extended","stress")][string]$Mode = "quick",
   [ValidateRange(1,10)][int]$Repetitions = 3,
-  [string]$OutputDir = (Join-Path ([IO.Path]::GetTempPath()) "bonsai2-pp-results")
+  [string]$OutputDir = ""
 )
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
+  $OutputDir = Join-Path $repoRoot "experiments\bonsai2-rx9060xt\pp-batch-v01\results"
+}
 foreach ($file in @($ModelPath,$BenchPath)) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "File not found: $file" }
 }
@@ -17,7 +21,7 @@ switch ($Mode) {
   "extended" { $bs=@(32768,65536,131072); $ubs=@(512,1024,1536,2048); $ps=@(4096,8192,16384) }
   "stress" { $bs=@(131072,262144); $ubs=@(1024,1536,2048,4096); $ps=@(8192,16384) }
 }
-$runDir=Join-Path $OutputDir ((Get-Date -Format "yyyyMMdd-HHmmss")+"-$Mode")
+$runDir=Join-Path $OutputDir ("run_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 $metadata=[ordered]@{
   timestamp=(Get-Date).ToString("o");mode=$Mode;device=$Device
