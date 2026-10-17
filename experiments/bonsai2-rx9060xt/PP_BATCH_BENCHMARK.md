@@ -34,7 +34,7 @@ Change `-Mode` to `extended` (36 cases) or `stress` (16 cases) only after quick 
 Fixed: GPU offload 99 layers, Vulkan device, split mode none, K q8_0 / V q4_0, Flash Attention on, threads 4, PP-only (generation disabled). These match the relevant performance knobs of the local launcher; no speculative decoding/MTP.
 
 ## Results / interpretation
-Results are written outside the checkout by default, under the Windows temp directory `bonsai2-pp-results/<timestamp>-<mode>/`. Each case generates a JSON benchmark, stderr log, and a CSV summary that also preserves failed cases. Override with `-OutputDir`.
+Results default to `experiments/bonsai2-rx9060xt/pp-batch-v01/results/run_YYYYMMDD_HHMMSS/` within the repository, matching the preceding RX 9060 XT experiment conventions (experiment-local results and a timestamped run directory). Each case generates a JSON benchmark, stderr log, and a CSV summary that also preserves failed cases. `metadata.json` records the selected mode. Override the *results root* with `-OutputDir`. Review raw results before committing; no binaries, models, user-specific paths, or secrets should enter Git.
 
 A logical batch of 32768 does not mean 32768 actual prompt tokens: for this experiment prompt lengths are varied independently. `llama-bench` does **not** reserve the existing llama-server configuration's full 98304-token context; follow with server tests at 96k using actual 16k/32k/64k input for long-context validation. Track driver, llama.cpp build, GPU power limit, VRAM residency, and temperature separately.
 
