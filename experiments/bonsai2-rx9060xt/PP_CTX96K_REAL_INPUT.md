@@ -28,6 +28,22 @@ Run this **next**, without modifying the existing baseline or quick modes:
 
 The four configurations are **batch 16384 / 32768** × **ubatch 256 / 512**. Thus the earlier winning (32768,512) is remeasured alongside the new (16384,256) combination; each has 3 trials, 12 total. Batch 16384 is smaller than the 32768-token input and intentionally forces logical batching across the prompt. If the downshift is favorable, `-Mode downshift-extended` covers batch **8192 / 16384 / 32768** × ubatch **128 / 256 / 512** (9 configurations, 27 trials). These are separate runs and no measurements are asserted here.
 
+## Midpoint search (2026-10-18)
+
+The measured downward sweep (9 cases, 27 runs) found the best mean at batch 8192 / ubatch 256 (311.86 tok/s). Differences among batches at ubatch 256 were under 0.5 tok/s, which is smaller than run-to-run drift; treat batch ranking as unresolved.
+
+Run the next **9-case midpoint sweep**:
+
+\`\`\`powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode midpoint
+\`\`\`
+
+- Batches: 8192, **12288 (midpoint)**, 16384.
+- Microbatches: **192 (128–256 midpoint)**, 256 (control), **384 (256–512 midpoint)**.
+- 9 configurations × 3 repetitions = 27 PP trials, full server restart per configuration, fixed 98304 ctx and 32768-token prompt.
+- Optional follow-up \`-Mode midpoint-edge\` checks batch **4096** versus **8192** at microbatch 192/256/384. Do not claim a minimum solely from a 0.1–1% difference: control for time-order, clock and thermal drift before narrowing further.
+
 ## Manual server mode (alternative)
 
 ## Dataset selection
