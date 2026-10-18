@@ -1,3 +1,14 @@
+## Fine microbatch sweep (2026-10-18)
+
+After the 12-configuration / five-trial sweep, all cases completed. Mean PP tok/s was 284.58 (b4096/ub256), 285.85 (b8192/ub256), and 285.75 (b16384/ub256); ubatch 256 led in each of the three batch groups. TG dips are treated as non-gating noise for this PP-focused pass, not discarded from raw logs.
+
+The `pp-ubatch-fine` mode tests 18 configurations: batches 4096/8192/16384 with ubatches 192/224/256/288/320/384, keeping MTP ON by default. It accepts the standard `-Repetitions` parameter; the default remains three runs each. The runner executes in ascending batch/ubatch order; it does not randomize order, so small differences can be confounded by warm-up or thermal drift. A single local measurement does not establish universal optimality.
+
+```powershell
+ git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+ pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode pp-ubatch-fine -Repetitions 3
+```
+
 ## MTP ON PP/TG focus test (2026-10-18)
 
 The `mtp-pp-tg-focus` mode evaluates logical batch `4096,8192,16384` crossed with microbatch `128,192,256,384` (12 configurations). It defaults to five **back-to-back trials per configuration**, with MTP ON by default and 512 output tokens per trial. Supply `-Repetitions N` to explicitly override five trials. Each configuration starts a new server; repeated trials inside it reuse that server. This version is **not** a round-robin or randomized-order experiment.
