@@ -8,6 +8,7 @@ param(
   [int]$PromptTokens = 32768,
   [ValidateSet("quick","extended")][string]$Mode = "quick",
   [int]$Repetitions = 3,
+  [ValidateRange(32,2048)][int]$GenerateTokens = 512,
   [switch]$RepeatInput,
   [string]$OutputDir = ""
 )
@@ -49,25 +50,27 @@ if ($RepeatInput -and $ids.Count -lt $PromptTokens) {
 $ids=@($ids | Select-Object -First $PromptTokens)
 if ($ids.Count -ne $PromptTokens) { throw "Failed to prepare requested token count" }
 $hash=(Get-FileHash -LiteralPath $InputPath -Algorithm SHA256).Hash
-$metadata=[ordered]@{input_file=[IO.Path]::GetFileName($InputPath);input_sha256=$hash;input_original_tokens=$originalTokenCount;prompt_tokens=$PromptTokens;context_expected=$ContextSize;context_reported=$ctx;server=$base;mode=$Mode;repetitions=$Repetitions;repeat_input=$RepeatInput.IsPresent;warning="Server startup parameters -c 98304 -np 1 and cache behavior must be verified via log. Restart server between configurations; repeated runs may be cache-affected."}
+$metadata=[ordered]@{input_file=[IO.Path]::GetFileName($InputPath);input_sha256=$hash;input_original_tokens=$originalTokenCount;prompt_tokens=$PromptTokens;context_expected=$ContextSize;context_reported=$ctx;server=$base;mode=$Mode;repetitions=$Repetitions;generate_tokens=$GenerateTokens;repeat_input=$RepeatInput.IsPresent;warning="Server startup parameters -c 98304 -np 1 and cache behavior must be verified via log. Restart server between configurations; repeated runs may be cache-affected."}
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runDir "metadata.json") -Encoding utf8
 $rows=@()
 for ($i=1;$i -le $Repetitions;$i++) {
   # llama-server completion accepts token ids as prompt, avoiding retokenization.
   # cache_prompt=false requests no prefix reuse; check timings.prompt_n to detect residual reuse.
-  $body=@{prompt=$ids;n_predict=1;cache_prompt=$false;stream=$false;temperature=0;seed=1234} | ConvertTo-Json -Compress -Depth 10
+  $body=@{prompt=$ids;n_predict=$GenerateTokens;ignore_eos=$true;cache_prompt=$false;stream=$false;temperature=0;seed=1234} | ConvertTo-Json -Compress -Depth 10
   try {
     $response=Invoke-RestMethod -Uri "$base/completion" -Method Post -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 1800
     $response | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $runDir "response_$i.json") -Encoding utf8
     $timings=$response.timings
     $measured=[int]$timings.prompt_n
-    $status= if ($measured -ge ($PromptTokens-16)) {"OK"} else {"CACHE_OR_SHORT_PREFILL"}
-    $rows += [pscustomobject]@{trial=$i;status=$status;requested_tokens=$PromptTokens;actual_prompt_n=$measured;prompt_ms=$timings.prompt_ms;prompt_per_second=$timings.prompt_per_second}
+    $generated=[int]$timings.predicted_n
+    $tg=[double]$timings.predicted_per_second
+    $status= if ($measured -lt ($PromptTokens-16)) {"CACHE_OR_SHORT_PREFILL"} elseif ($generated -lt ($GenerateTokens-4) -or $tg -le 0) {"INCOMPLETE_TG"} else {"OK"}
+    $rows += [pscustomobject]@{trial=$i;status=$status;requested_tokens=$PromptTokens;actual_prompt_n=$measured;prompt_ms=$timings.prompt_ms;prompt_per_second=$timings.prompt_per_second;generated_tokens=$generated;tg_per_second=$tg;tg_ms=$timings.predicted_ms}
   } catch {
     $_.Exception.ToString() | Set-Content -LiteralPath (Join-Path $runDir "error_$i.txt")
-    $rows += [pscustomobject]@{trial=$i;status="ERROR";requested_tokens=$PromptTokens;actual_prompt_n=$null;prompt_ms=$null;prompt_per_second=$null}
+    $rows += [pscustomobject]@{trial=$i;status="ERROR";requested_tokens=$PromptTokens;actual_prompt_n=$null;prompt_ms=$null;prompt_per_second=$null;generated_tokens=$null;tg_per_second=$null;tg_ms=$null}
   }
   $rows | Export-Csv -LiteralPath (Join-Path $runDir "summary.csv") -NoTypeInformation -Encoding utf8
-  Write-Host "Trial $i : $($rows[-1].status) $($rows[-1].prompt_per_second) tok/s (prompt_n=$($rows[-1].actual_prompt_n))"
+  Write-Host "Trial $i : $($rows[-1].status) $($rows[-1].prompt_per_second) tok/s TG=$($rows[-1].tg_per_second) tok/s (prompt_n=$($rows[-1].actual_prompt_n); generated=$($rows[-1].generated_tokens))"
 }
 Write-Host "Result: $(Join-Path $runDir 'summary.csv')"
