@@ -44,6 +44,21 @@ pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96
 - 9 configurations × 3 repetitions = 27 PP trials, full server restart per configuration, fixed 98304 ctx and 32768-token prompt.
 - Optional follow-up \`-Mode midpoint-edge\` checks batch **4096** versus **8192** at microbatch 192/256/384. Do not claim a minimum solely from a 0.1–1% difference: control for time-order, clock and thermal drift before narrowing further.
 
+## Joint PP + TG resweep (2026-10-18)
+
+The automated runner now captures both full-input PP and sustained TG from **the same 32768-token prompt**. The request generates 512 tokens by default (\`-GenerateTokens 512\`) with EOS ignored, enabling meaningful \`timings.predicted_per_second\`. Each trial is accepted only when the full input and almost all requested output tokens are processed. PP and TG averages are kept separately in the run's \`summary.csv\`; raw \`response_*.json\` and server logs remain available.
+
+First, validate the new TG instrumentation with a single reference configuration:
+
+\`\`\`powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode baseline
+\`\`\`
+
+Then use \`-Mode downshift-extended\` and \`-Mode midpoint\` as tractable 9-case groups, or the full \`-Mode pp-tg-all\`. Full mode measures a 7 × 8 factorial grid (56 cases, 168 trials) over batches 4096, 8192, 12288, 16384, 32768, 65536, 131072 and microbatches 128, 192, 256, 384, 512, 1024, 1536, 2048. It includes **additional combinations**, not only previously visited points. A complete run can be lengthy and may expose memory or stability constraints. Do not launch the full mode until baseline TG succeeds.
+
+Fixed: RX9060XT Vulkan0, context 98304, actual prefill 32768, KV K Q8/V Q4, FA on, MTP off, one slot. The run defaults to existing experiment-local results and never overwrites earlier PP-only results. Historical PP-only runs cannot be treated as TG measurements. No new measurements are claimed until run on the user machine.
+
 ## Manual server mode (alternative)
 
 ## Dataset selection
