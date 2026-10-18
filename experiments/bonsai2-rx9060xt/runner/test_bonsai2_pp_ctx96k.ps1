@@ -64,11 +64,14 @@ for ($i=1;$i -le $Repetitions;$i++) {
     $measured=[int]$timings.prompt_n
     $generated=[int]$timings.predicted_n
     $tg=[double]$timings.predicted_per_second
+    $draftN=if ($timings.PSObject.Properties.Name -contains "draft_n") {[int]$timings.draft_n} else {$null}
+    $draftAccepted=if ($timings.PSObject.Properties.Name -contains "draft_n_accepted") {[int]$timings.draft_n_accepted} else {$null}
+    $draftAcceptance=if ($null -ne $draftN -and $draftN -gt 0 -and $null -ne $draftAccepted) {[math]::Round(100.0*$draftAccepted/$draftN,3)} else {$null}
     $status= if ($measured -lt ($PromptTokens-16)) {"CACHE_OR_SHORT_PREFILL"} elseif ($generated -lt ($GenerateTokens-4) -or $tg -le 0) {"INCOMPLETE_TG"} else {"OK"}
-    $rows += [pscustomobject]@{trial=$i;status=$status;requested_tokens=$PromptTokens;actual_prompt_n=$measured;prompt_ms=$timings.prompt_ms;prompt_per_second=$timings.prompt_per_second;generated_tokens=$generated;tg_per_second=$tg;tg_ms=$timings.predicted_ms}
+    $rows += [pscustomobject]@{trial=$i;status=$status;requested_tokens=$PromptTokens;actual_prompt_n=$measured;prompt_ms=$timings.prompt_ms;prompt_per_second=$timings.prompt_per_second;generated_tokens=$generated;tg_per_second=$tg;tg_ms=$timings.predicted_ms;draft_n=$draftN;draft_accepted=$draftAccepted;draft_acceptance_pct=$draftAcceptance}
   } catch {
     $_.Exception.ToString() | Set-Content -LiteralPath (Join-Path $runDir "error_$i.txt")
-    $rows += [pscustomobject]@{trial=$i;status="ERROR";requested_tokens=$PromptTokens;actual_prompt_n=$null;prompt_ms=$null;prompt_per_second=$null;generated_tokens=$null;tg_per_second=$null;tg_ms=$null}
+    $rows += [pscustomobject]@{trial=$i;status="ERROR";requested_tokens=$PromptTokens;actual_prompt_n=$null;prompt_ms=$null;prompt_per_second=$null;generated_tokens=$null;tg_per_second=$null;tg_ms=$null;draft_n=$null;draft_accepted=$null;draft_acceptance_pct=$null}
   }
   $rows | Export-Csv -LiteralPath (Join-Path $runDir "summary.csv") -NoTypeInformation -Encoding utf8
   Write-Host "Trial $i : $($rows[-1].status) $($rows[-1].prompt_per_second) tok/s TG=$($rows[-1].tg_per_second) tok/s (prompt_n=$($rows[-1].actual_prompt_n); generated=$($rows[-1].generated_tokens))"
