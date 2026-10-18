@@ -3,7 +3,8 @@ param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
  [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [int]$Repetitions=3,
- [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512, [string]$OutputDir=""
+ [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512,
+ [ValidateSet("on","off")][string]$Mtp="on", [string]$OutputDir=""
 )
 $ErrorActionPreference="Stop"
 $root=(Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
@@ -32,7 +33,7 @@ $metadata=[ordered]@{
  server_sha256=(Get-FileHash $ServerPath -Algorithm SHA256).Hash
  input_sha256=(Get-FileHash $InputPath -Algorithm SHA256).Hash
  mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions;generate_tokens=$GenerateTokens
- kv="K Q8_0 / V Q4_0";flash_attention="on";mtp="off";parallel=1
+ kv="K Q8_0 / V Q4_0";flash_attention="on";mtp=$Mtp;spec_type=$(if($Mtp -eq "on"){"draft-mtp"}else{"none"});spec_draft_n_max=$(if($Mtp -eq "on"){2}else{0});fit="off";parallel=1
  batch_values=$bs;ubatch_values=$ubs;order="ascending batch then ascending ubatch"
 }
 $metadata|ConvertTo-Json|Set-Content (Join-Path $out "manifest.json")
@@ -43,8 +44,9 @@ foreach($b in $bs){foreach($ub in $ubs){
  $stdout=Join-Path $dir "server.stdout.log";$stderr=Join-Path $dir "server.stderr.log"
  $argsList=@("-m",$ModelPath,"--device",$Device,"-ngl","99","-sm","none","-c","98304",
  "-b",[string]$b,"-ub",[string]$ub,"-fa","on","-ctk","q8_0","-ctv","q4_0",
- "-np","1","--ctx-checkpoints","0","--dry-multiplier","0",
+ "-np","1","--ctx-checkpoints","0","--fit","off","--dry-multiplier","0",
  "--host","127.0.0.1","--port",[string]$Port)
+ if($Mtp -eq "on"){$argsList+=@("--spec-type","draft-mtp","--spec-draft-n-max","2")}
  $argsList|ConvertTo-Json|Set-Content (Join-Path $dir "arguments.json")
  $status="ERROR";$avg=$null;$tgAvg=$null;$reason="";$proc=$null
  try{
