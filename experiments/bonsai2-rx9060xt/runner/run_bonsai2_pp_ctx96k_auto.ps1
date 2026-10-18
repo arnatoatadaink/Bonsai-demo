@@ -1,7 +1,7 @@
 # Automated 96k context / 32k PP test; PowerShell 7.
 param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
- [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck","mtp-pp-tg-focus","pp-ubatch-fine")][string]$Mode="baseline",
+ [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck","mtp-pp-tg-focus","pp-ubatch-fine","pp-ubatch-alignment")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [ValidateRange(1,100)][int]$Repetitions=3,
  [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512,
  [ValidateSet("on","off")][string]$Mtp="on", [double]$TgAnomalyThreshold=38.0, [string]$OutputDir=""
@@ -30,6 +30,7 @@ switch($Mode){
  "tg-anomaly-recheck" {$bs=@(4096);$ubs=@(256)}
  "mtp-pp-tg-focus" {$bs=@(4096,8192,16384);$ubs=@(128,192,256,384)}
  "pp-ubatch-fine" {$bs=@(4096,8192,16384);$ubs=@(192,224,256,288,320,384)}
+ "pp-ubatch-alignment" {$bs=@(4096,8192);$ubs=@(128,160,192,256,320,352,384,448,512)}
 }
 $out=Join-Path $OutputDir ("run_"+(Get-Date -Format "yyyyMMdd_HHmmss")+"_ctx96k_pp32k_auto")
 New-Item -ItemType Directory -Force -Path $out | Out-Null
