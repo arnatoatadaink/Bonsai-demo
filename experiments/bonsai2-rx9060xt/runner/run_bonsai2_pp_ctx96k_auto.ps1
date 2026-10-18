@@ -2,12 +2,12 @@
 param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
  [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck","mtp-pp-tg-focus")][string]$Mode="baseline",
- [int]$Port=18082, [string]$Device="Vulkan0", [int]$Repetitions=3,
+ [int]$Port=18082, [string]$Device="Vulkan0", [ValidateRange(1,100)][int]$Repetitions=3,
  [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512,
  [ValidateSet("on","off")][string]$Mtp="on", [double]$TgAnomalyThreshold=38.0, [string]$OutputDir=""
 )
 $ErrorActionPreference="Stop"
-if ($Mode -eq "mtp-pp-tg-focus" -and $Repetitions -eq 3) { $Repetitions=5 }
+if ($Mode -eq "mtp-pp-tg-focus" -and -not $PSBoundParameters.ContainsKey("Repetitions")) { $Repetitions=5 }
 if ($TgAnomalyThreshold -le 0) { throw "TgAnomalyThreshold must be positive" }
 $root=(Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 $prismRoot=Join-Path $root "..\.."
@@ -101,7 +101,7 @@ foreach($b in $bs){foreach($ub in $ubs){
  $bad=@($own|Where-Object {$_.tg_anomaly -eq $true}).Count
  $tgMin=if($own.Count){($own|Measure-Object tg_tok_s -Minimum).Minimum}else{$null}
  $acceptMean=if(@($own|Where-Object {$_.draft_acceptance_pct -ne ""}).Count){(@($own|Where-Object {$_.draft_acceptance_pct -ne ""})|Measure-Object draft_acceptance_pct -Average).Average}else{$null}
- $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;avg_tg_tok_s=$tgAvg;min_tg_tok_s=$tgMin;tg_anomalies=$bad;valid_trials=$own.Count;tg_anomaly_rate=if($own.Count){$bad/$own.Count}else{$null};mean_draft_acceptance_pct=$acceptMean;error=$reason}
+ $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;avg_tg_tok_s=$tgAvg;min_tg_tok_s=$tgMin;tg_anomalies=$bad;valid_trials=$own.Count;tg_anomaly_rate=$(if($own.Count){$bad/$own.Count}else{$null});mean_draft_acceptance_pct=$acceptMean;error=$reason}
  $rows|Export-Csv (Join-Path $out "summary.csv") -NoTypeInformation -Encoding utf8
  $trialRows|Export-Csv (Join-Path $out "trials.csv") -NoTypeInformation -Encoding utf8
  Write-Host "$id : $status PP=$avg TG=$tgAvg"
