@@ -1,12 +1,14 @@
 # Automated 96k context / 32k PP test; PowerShell 7.
 param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
- [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck")][string]$Mode="baseline",
+ [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck","mtp-pp-tg-focus")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [int]$Repetitions=3,
  [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512,
- [ValidateSet("on","off")][string]$Mtp="on", [string]$OutputDir=""
+ [ValidateSet("on","off")][string]$Mtp="on", [double]$TgAnomalyThreshold=38.0, [string]$OutputDir=""
 )
 $ErrorActionPreference="Stop"
+if ($Mode -eq "mtp-pp-tg-focus" -and $Repetitions -eq 3) { $Repetitions=5 }
+if ($TgAnomalyThreshold -le 0) { throw "TgAnomalyThreshold must be positive" }
 $root=(Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 $prismRoot=Join-Path $root "..\.."
 if(!$ServerPath){$ServerPath=Join-Path $prismRoot "dev\llama.cpp\build-vulkan-ucrt64\bin\llama-server.exe"}
@@ -26,6 +28,7 @@ switch($Mode){
  "midpoint-edge" {$bs=@(4096,8192);$ubs=@(192,256,384)}
  "pp-tg-all" {$bs=@(4096,8192,12288,16384,32768,65536,131072);$ubs=@(128,192,256,384,512,1024,1536,2048)}
  "tg-anomaly-recheck" {$bs=@(4096);$ubs=@(256)}
+ "mtp-pp-tg-focus" {$bs=@(4096,8192,16384);$ubs=@(128,192,256,384)}
 }
 $out=Join-Path $OutputDir ("run_"+(Get-Date -Format "yyyyMMdd_HHmmss")+"_ctx96k_pp32k_auto")
 New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -33,12 +36,12 @@ $metadata=[ordered]@{
  model_sha256=(Get-FileHash $ModelPath -Algorithm SHA256).Hash
  server_sha256=(Get-FileHash $ServerPath -Algorithm SHA256).Hash
  input_sha256=(Get-FileHash $InputPath -Algorithm SHA256).Hash
- mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions;generate_tokens=$GenerateTokens
+ mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions;generate_tokens=$GenerateTokens;tg_anomaly_threshold=$TgAnomalyThreshold
  kv="K Q8_0 / V Q4_0";flash_attention="on";mtp=$Mtp;spec_type=$(if($Mtp -eq "on"){"draft-mtp"}else{"none"});spec_draft_n_max=$(if($Mtp -eq "on"){2}else{0});fit="off";parallel=1
  batch_values=$bs;ubatch_values=$ubs;order="ascending batch then ascending ubatch"
 }
 $metadata|ConvertTo-Json|Set-Content (Join-Path $out "manifest.json")
-$rows=@()
+$rows=@();$trialRows=@()
 foreach($b in $bs){foreach($ub in $ubs){
  $id=("b{0}_ub{1}" -f $b,$ub);$dir=Join-Path $out $id
  New-Item -ItemType Directory -Force -Path $dir|Out-Null
@@ -75,6 +78,16 @@ foreach($b in $bs){foreach($ub in $ubs){
    $trials=@(Import-Csv (Join-Path $runs[0].FullName "summary.csv"))
    $valid=@($trials|Where-Object {$_.status -eq "OK" -and [double]$_.prompt_per_second -gt 0})
    if($valid.Count -ne $Repetitions){throw "Full prefill count $($valid.Count)/$Repetitions"}
+   foreach($t in $trials) {
+    $tgv=0.0
+    $hasTG=[double]::TryParse([string]$t.tg_per_second,[ref]$tgv)
+    $trialRows+= [pscustomobject]@{
+      case=$id;batch=$b;ubatch=$ub;trial=$t.trial;status=$t.status
+      pp_tok_s=$t.prompt_per_second;tg_tok_s=$t.tg_per_second
+      draft_n=$t.draft_n;draft_accepted=$t.draft_accepted;draft_acceptance_pct=$t.draft_acceptance_pct
+      tg_anomaly=($t.status -eq "OK" -and $hasTG -and $tgv -lt $TgAnomalyThreshold)
+    }
+   }
    $avg=($valid|Measure-Object prompt_per_second -Average).Average
    $tgAvg=($valid|Measure-Object tg_per_second -Average).Average;$status="OK"
   }finally{
@@ -84,8 +97,13 @@ foreach($b in $bs){foreach($ub in $ubs){
   }
  }catch{$reason=$_.Exception.Message;$reason|Set-Content (Join-Path $dir "error.txt");Write-Warning $reason}
  finally{if($proc -and !$proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}}
- $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;avg_tg_tok_s=$tgAvg;error=$reason}
+ $own=@($trialRows|Where-Object {$_.case -eq $id -and $_.status -eq "OK"})
+ $bad=@($own|Where-Object {$_.tg_anomaly -eq $true}).Count
+ $tgMin=if($own.Count){($own|Measure-Object tg_tok_s -Minimum).Minimum}else{$null}
+ $acceptMean=if(@($own|Where-Object {$_.draft_acceptance_pct -ne ""}).Count){(@($own|Where-Object {$_.draft_acceptance_pct -ne ""})|Measure-Object draft_acceptance_pct -Average).Average}else{$null}
+ $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;avg_tg_tok_s=$tgAvg;min_tg_tok_s=$tgMin;tg_anomalies=$bad;valid_trials=$own.Count;tg_anomaly_rate=if($own.Count){$bad/$own.Count}else{$null};mean_draft_acceptance_pct=$acceptMean;error=$reason}
  $rows|Export-Csv (Join-Path $out "summary.csv") -NoTypeInformation -Encoding utf8
+ $trialRows|Export-Csv (Join-Path $out "trials.csv") -NoTypeInformation -Encoding utf8
  Write-Host "$id : $status PP=$avg TG=$tgAvg"
  Start-Sleep -Seconds 2
 }}
