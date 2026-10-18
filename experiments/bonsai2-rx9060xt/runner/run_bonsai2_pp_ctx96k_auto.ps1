@@ -1,7 +1,7 @@
 # Automated 96k context / 32k PP test; PowerShell 7.
 param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
- [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all")][string]$Mode="baseline",
+ [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [int]$Repetitions=3,
  [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512,
  [ValidateSet("on","off")][string]$Mtp="on", [string]$OutputDir=""
@@ -25,6 +25,7 @@ switch($Mode){
  "midpoint" {$bs=@(8192,12288,16384);$ubs=@(192,256,384)}
  "midpoint-edge" {$bs=@(4096,8192);$ubs=@(192,256,384)}
  "pp-tg-all" {$bs=@(4096,8192,12288,16384,32768,65536,131072);$ubs=@(128,192,256,384,512,1024,1536,2048)}
+ "tg-anomaly-recheck" {$bs=@(4096);$ubs=@(256)}
 }
 $out=Join-Path $OutputDir ("run_"+(Get-Date -Format "yyyyMMdd_HHmmss")+"_ctx96k_pp32k_auto")
 New-Item -ItemType Directory -Force -Path $out | Out-Null
