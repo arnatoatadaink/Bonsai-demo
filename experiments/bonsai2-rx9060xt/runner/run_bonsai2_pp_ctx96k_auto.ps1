@@ -1,9 +1,9 @@
 # Automated 96k context / 32k PP test; PowerShell 7.
 param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
- [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge")][string]$Mode="baseline",
+ [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [int]$Repetitions=3,
- [int]$TimeoutSec=360, [string]$OutputDir=""
+ [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512, [string]$OutputDir=""
 )
 $ErrorActionPreference="Stop"
 $root=(Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
@@ -23,6 +23,7 @@ switch($Mode){
  "downshift-extended" {$bs=@(8192,16384,32768);$ubs=@(128,256,512)}
  "midpoint" {$bs=@(8192,12288,16384);$ubs=@(192,256,384)}
  "midpoint-edge" {$bs=@(4096,8192);$ubs=@(192,256,384)}
+ "pp-tg-all" {$bs=@(4096,8192,12288,16384,32768,65536,131072);$ubs=@(128,192,256,384,512,1024,1536,2048)}
 }
 $out=Join-Path $OutputDir ("run_"+(Get-Date -Format "yyyyMMdd_HHmmss")+"_ctx96k_pp32k_auto")
 New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -30,7 +31,7 @@ $metadata=[ordered]@{
  model_sha256=(Get-FileHash $ModelPath -Algorithm SHA256).Hash
  server_sha256=(Get-FileHash $ServerPath -Algorithm SHA256).Hash
  input_sha256=(Get-FileHash $InputPath -Algorithm SHA256).Hash
- mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions
+ mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions;generate_tokens=$GenerateTokens
  kv="K Q8_0 / V Q4_0";flash_attention="on";mtp="off";parallel=1
  batch_values=$bs;ubatch_values=$ubs;order="ascending batch then ascending ubatch"
 }
@@ -45,7 +46,7 @@ foreach($b in $bs){foreach($ub in $ubs){
  "-np","1","--ctx-checkpoints","0","--dry-multiplier","0",
  "--host","127.0.0.1","--port",[string]$Port)
  $argsList|ConvertTo-Json|Set-Content (Join-Path $dir "arguments.json")
- $status="ERROR";$avg=$null;$reason="";$proc=$null
+ $status="ERROR";$avg=$null;$tgAvg=$null;$reason="";$proc=$null
  try{
   if(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue){throw "Port occupied"}
   $psi=[Diagnostics.ProcessStartInfo]::new()
@@ -65,13 +66,14 @@ foreach($b in $bs){foreach($ub in $ubs){
     Start-Sleep -Seconds 2
    }
    if(!$ready){throw "Health timeout"}
-   & $runner -InputPath $InputPath -ServerUrl "http://127.0.0.1:$Port" -ContextSize 98304 -PromptTokens 32768 -Repetitions $Repetitions -OutputDir $dir
+   & $runner -InputPath $InputPath -ServerUrl "http://127.0.0.1:$Port" -ContextSize 98304 -PromptTokens 32768 -Repetitions $Repetitions -GenerateTokens $GenerateTokens -OutputDir $dir
    $runs=@(Get-ChildItem $dir -Directory -Filter "run_*"|Sort-Object LastWriteTime -Descending)
    if(!$runs.Count){throw "No child summary"}
    $trials=@(Import-Csv (Join-Path $runs[0].FullName "summary.csv"))
    $valid=@($trials|Where-Object {$_.status -eq "OK" -and [double]$_.prompt_per_second -gt 0})
    if($valid.Count -ne $Repetitions){throw "Full prefill count $($valid.Count)/$Repetitions"}
-   $avg=($valid|Measure-Object prompt_per_second -Average).Average;$status="OK"
+   $avg=($valid|Measure-Object prompt_per_second -Average).Average
+   $tgAvg=($valid|Measure-Object tg_per_second -Average).Average;$status="OK"
   }finally{
    if($proc -and !$proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue;$proc.WaitForExit(10000)|Out-Null}
    try{$ot.Wait(10000)|Out-Null;$et.Wait(10000)|Out-Null}catch{}
@@ -79,9 +81,9 @@ foreach($b in $bs){foreach($ub in $ubs){
   }
  }catch{$reason=$_.Exception.Message;$reason|Set-Content (Join-Path $dir "error.txt");Write-Warning $reason}
  finally{if($proc -and !$proc.HasExited){Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}}
- $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;error=$reason}
+ $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;avg_tg_tok_s=$tgAvg;error=$reason}
  $rows|Export-Csv (Join-Path $out "summary.csv") -NoTypeInformation -Encoding utf8
- Write-Host "$id : $status PP=$avg"
+ Write-Host "$id : $status PP=$avg TG=$tgAvg"
  Start-Sleep -Seconds 2
 }}
 Write-Host "Results: $out"
