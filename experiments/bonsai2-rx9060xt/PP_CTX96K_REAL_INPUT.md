@@ -44,6 +44,12 @@ pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96
 - 9 configurations × 3 repetitions = 27 PP trials, full server restart per configuration, fixed 98304 ctx and 32768-token prompt.
 - Optional follow-up \`-Mode midpoint-edge\` checks batch **4096** versus **8192** at microbatch 192/256/384. Do not claim a minimum solely from a 0.1–1% difference: control for time-order, clock and thermal drift before narrowing further.
 
+## Stable speed-oriented defaults (2026-10-18)
+
+The automated runner defaults to **MTP ON** (`--spec-type draft-mtp --spec-draft-n-max 2`) and `--fit off`, keeping `--ctx-checkpoints 0`, `--dry-multiplier 0`, K Q8/V Q4, Flash Attention on, and a single slot. This follows the earlier RX 9060 XT 32k/64k MTP configurations, **but MTP ON with reserved 96k context and 32k input is not yet long-run stability validated**.
+
+Use `-Mtp off` for a non-MTP control, and `-Mtp on` explicitly if desired (on is default). TG `predicted_per_second` under speculation includes draft overhead, so retain original `response_*.json` and startup logs when interpreting throughput. Record any failed startup as a failed configuration, rather than silently falling back to MTP OFF. Test the single `-Mode baseline -Repetitions 1` before a full sweep. 
+
 ## Joint PP + TG resweep (2026-10-18)
 
 The automated runner now captures both full-input PP and sustained TG from **the same 32768-token prompt**. The request generates 512 tokens by default (\`-GenerateTokens 512\`) with EOS ignored, enabling meaningful \`timings.predicted_per_second\`. Each trial is accepted only when the full input and almost all requested output tokens are processed. PP and TG averages are kept separately in the run's \`summary.csv\`; raw \`response_*.json\` and server logs remain available.
