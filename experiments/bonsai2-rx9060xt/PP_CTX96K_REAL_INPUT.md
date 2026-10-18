@@ -1,3 +1,12 @@
+## PP microbatch alignment follow-up (2026-10-18)
+
+Following the 18-configuration fine sweep, microbatches 224 and 288 showed reproducible PP slowdowns relative to 256 and 320. Use `pp-ubatch-alignment` to compare batch sizes 4096 and 8192 with microbatches 128, 160, 192, 256, 320, 352, 384, 448, 512 (18 cases, three trials each by default). MTP remains ON; context 98304, input 32768, generated 512, KV K Q8/V Q4, and draft 2 are unchanged. TG is recorded but not used as an exclusion criterion in this PP-focused sweep. Testing 32/64-multiple boundaries is an empirical hypothesis, not an established Vulkan kernel explanation.
+
+```powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode pp-ubatch-alignment -Repetitions 3
+```
+
 ## Fine microbatch sweep (2026-10-18)
 
 After the 12-configuration / five-trial sweep, all cases completed. Mean PP tok/s was 284.58 (b4096/ub256), 285.85 (b8192/ub256), and 285.75 (b16384/ub256); ubatch 256 led in each of the three batch groups. TG dips are treated as non-gating noise for this PP-focused pass, not discarded from raw logs.
