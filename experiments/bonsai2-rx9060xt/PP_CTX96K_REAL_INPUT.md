@@ -1,3 +1,14 @@
+## MTP ON PP/TG focus test (2026-10-18)
+
+The `mtp-pp-tg-focus` mode evaluates logical batch `4096,8192,16384` crossed with microbatch `128,192,256,384` (12 configurations). It defaults to five **back-to-back trials per configuration**, with MTP ON by default and 512 output tokens per trial. Supply `-Repetitions N` to explicitly override five trials. Each configuration starts a new server; repeated trials inside it reuse that server. This version is **not** a round-robin or randomized-order experiment.
+
+```powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode mtp-pp-tg-focus
+```
+
+Run-level `summary.csv` contains mean PP/TG, minimum TG, count and fraction of completed trials with TG below 38 tok/s, and mean available draft acceptance. `trials.csv` contains trial-by-trial metrics. Raw server and response logs are preserved. The 38 tok/s threshold is a provisional anomaly flag, not a validated statistical confidence bound. Check `status` and `valid_trials`: failed trials are not counted as benign measurements, and a case without five valid trials is marked ERROR. If startup or request fails, inspect `error.txt` and the raw logs.
+
 # Real workload: 96k context / 32k fixed prefill
 
 This is a **second, real-input validation**, separate from the existing `llama-bench` microbatch sweep.
