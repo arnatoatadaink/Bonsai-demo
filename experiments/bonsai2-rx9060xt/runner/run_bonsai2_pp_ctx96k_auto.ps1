@@ -1,7 +1,7 @@
 # Automated 96k context / 32k PP test; PowerShell 7.
 param(
  [string]$ServerPath="", [string]$ModelPath="", [string]$InputPath="",
- [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck","mtp-pp-tg-focus","pp-ubatch-fine","pp-ubatch-alignment")][string]$Mode="baseline",
+ [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck","mtp-pp-tg-focus","pp-ubatch-fine","pp-ubatch-alignment","pp-batch-divisibility")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [ValidateRange(1,100)][int]$Repetitions=3,
  [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512,
  [ValidateSet("on","off")][string]$Mtp="on", [double]$TgAnomalyThreshold=38.0, [string]$OutputDir=""
@@ -31,6 +31,7 @@ switch($Mode){
  "mtp-pp-tg-focus" {$bs=@(4096,8192,16384);$ubs=@(128,192,256,384)}
  "pp-ubatch-fine" {$bs=@(4096,8192,16384);$ubs=@(192,224,256,288,320,384)}
  "pp-ubatch-alignment" {$bs=@(4096,8192);$ubs=@(128,160,192,256,320,352,384,448,512)}
+ "pp-batch-divisibility" {$bs=@(4096,6144,8192,12288);$ubs=@(256,320,384)}
 }
 $out=Join-Path $OutputDir ("run_"+(Get-Date -Format "yyyyMMdd_HHmmss")+"_ctx96k_pp32k_auto")
 New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -40,7 +41,7 @@ $metadata=[ordered]@{
  input_sha256=(Get-FileHash $InputPath -Algorithm SHA256).Hash
  mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions;generate_tokens=$GenerateTokens;tg_anomaly_threshold=$TgAnomalyThreshold
  kv="K Q8_0 / V Q4_0";flash_attention="on";mtp=$Mtp;spec_type=$(if($Mtp -eq "on"){"draft-mtp"}else{"none"});spec_draft_n_max=$(if($Mtp -eq "on"){2}else{0});fit="off";parallel=1
- batch_values=$bs;ubatch_values=$ubs;order="ascending batch then ascending ubatch"
+ batch_values=$bs;ubatch_values=$ubs;order="ascending batch then ascending ubatch";hypothesis="batch divisibility independent of ubatch 64 alignment"
 }
 $metadata|ConvertTo-Json|Set-Content (Join-Path $out "manifest.json")
 $rows=@();$trialRows=@()
@@ -103,7 +104,7 @@ foreach($b in $bs){foreach($ub in $ubs){
  $bad=@($own|Where-Object {$_.tg_anomaly -eq $true}).Count
  $tgMin=if($own.Count){($own|Measure-Object tg_tok_s -Minimum).Minimum}else{$null}
  $acceptMean=if(@($own|Where-Object {$_.draft_acceptance_pct -ne ""}).Count){(@($own|Where-Object {$_.draft_acceptance_pct -ne ""})|Measure-Object draft_acceptance_pct -Average).Average}else{$null}
- $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;avg_tg_tok_s=$tgAvg;min_tg_tok_s=$tgMin;tg_anomalies=$bad;valid_trials=$own.Count;tg_anomaly_rate=$(if($own.Count){$bad/$own.Count}else{$null});mean_draft_acceptance_pct=$acceptMean;error=$reason}
+ $rows+= [pscustomobject]@{case=$id;batch=$b;ubatch=$ub;batch_remainder=($b % $ub);batch_divisible=(($b % $ub) -eq 0);context=98304;prompt=32768;status=$status;avg_pp_tok_s=$avg;avg_tg_tok_s=$tgAvg;min_tg_tok_s=$tgMin;tg_anomalies=$bad;valid_trials=$own.Count;tg_anomaly_rate=$(if($own.Count){$bad/$own.Count}else{$null});mean_draft_acceptance_pct=$acceptMean;error=$reason}
  $rows|Export-Csv (Join-Path $out "summary.csv") -NoTypeInformation -Encoding utf8
  $trialRows|Export-Csv (Join-Path $out "trials.csv") -NoTypeInformation -Encoding utf8
  Write-Host "$id : $status PP=$avg TG=$tgAvg"
