@@ -5,6 +5,8 @@ param(
  [string]$ServerPath="",
  [string]$BonsaiModelPath="",
  [string]$InputPath="",
+ [ValidatePattern("^Vulkan[0-9]+$")][string]$Gpu9060Device="Vulkan0",
+ [ValidatePattern("^Vulkan[0-9]+$")][string]$Gpu9070Device="Vulkan1",
  [string]$OutputDir="",
  [ValidateRange(1,100)][int]$Repetitions=3,
  [ValidateRange(32,2048)][int]$GenerateTokens=512,
@@ -13,15 +15,20 @@ param(
  [ValidateRange(0,600)][int]$BetweenRunsSec=15
 )
 $ErrorActionPreference="Stop"
-$repo=(Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
-$base=Join-Path $repo "..\.."
+$repo=(Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+if($Gpu9060Device -eq $Gpu9070Device){throw "GPU device IDs must be distinct."}
 if(!$ServerPath){throw "Specify -ServerPath explicitly (no machine-specific default)."}
 if(!$BonsaiModelPath){throw "Specify -BonsaiModelPath explicitly (verified MTP GGUF required)."}
 if(!$InputPath){throw "Specify -InputPath explicitly (original dataset required)."}
-if(!$OutputDir){$OutputDir=Join-Path $repo "experiments\bonsai2-rx9060xt\gpu-mtp-matrix\results"}
+if(!$OutputDir){$OutputDir=Join-Path $PSScriptRoot "results"}
 foreach($file in @($ServerPath,$BonsaiModelPath,$InputPath)){
  if(!(Test-Path -LiteralPath $file -PathType Leaf)){throw "Required file not found: $file"}
 }
+$expectedModelSha="3CB3F0056D2E34EE44245A64396004A21F8492573D6CE1266EC4B7222C131DD4"
+$expectedInputSha="758A9BE8F2DF0181226C15C070D8E8E704AC17EEBA893BBABB9726E6525A400F"
+if((Get-FileHash -LiteralPath $BonsaiModelPath -Algorithm SHA256).Hash -ne $expectedModelSha){throw "MTP model SHA256 mismatch: expected $expectedModelSha"}
+if((Get-FileHash -LiteralPath $InputPath -Algorithm SHA256).Hash -ne $expectedInputSha){throw "Original 32K source SHA256 mismatch: expected $expectedInputSha"}
+
 $child=Join-Path $PSScriptRoot "test_bonsai2_pp_ctx96k.ps1"
 if(!(Test-Path -LiteralPath $child)){throw "Missing child runner: $child"}
 function PortOccupied([int]$p){
@@ -32,13 +39,13 @@ $stamp=Get-Date -Format "yyyyMMdd_HHmmss"
 $out=Join-Path $OutputDir "matrix_$stamp"
 New-Item -ItemType Directory -Path $out -Force|Out-Null
 $profiles=@(
- [pscustomobject]@{name="rx9060_mtp_off";device="Vulkan0";model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$false;draftN=0},
- [pscustomobject]@{name="rx9070_mtp_off";device="Vulkan1";model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$false;draftN=0},
- [pscustomobject]@{name="rx9060_mtp_on";device="Vulkan0";model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$true;draftN=2},
- [pscustomobject]@{name="rx9070_mtp_on";device="Vulkan1";model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$true;draftN=2}
+ [pscustomobject]@{name="rx9060_mtp_off";device=$Gpu9060Device;model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$false;draftN=0},
+ [pscustomobject]@{name="rx9070_mtp_off";device=$Gpu9070Device;model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$false;draftN=0},
+ [pscustomobject]@{name="rx9060_mtp_on";device=$Gpu9060Device;model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$true;draftN=2},
+ [pscustomobject]@{name="rx9070_mtp_on";device=$Gpu9070Device;model=$BonsaiModelPath;ctx=98304;batch=4096;ubatch=256;k="q8_0";v="q4_0";threads=4;layers="99";mtp=$true;draftN=2}
 )
 $manifest=[ordered]@{
- order="RX9060 MTP off, RX9070 MTP off, RX9060 MTP on, RX9070 MTP on; fresh server per case";repetitions=$Repetitions
+ order="RX9060 MTP off, RX9070 MTP off, RX9060 MTP on, RX9070 MTP on; fresh server per case";repetitions=$Repetitions;gpu9060_device=$Gpu9060Device;gpu9070_device=$Gpu9070Device
  prompt_tokens=32768;generate_tokens=$GenerateTokens;between_runs_sec=$BetweenRunsSec
  server_sha256=(Get-FileHash -LiteralPath $ServerPath -Algorithm SHA256).Hash
  input_sha256=(Get-FileHash -LiteralPath $InputPath -Algorithm SHA256).Hash
