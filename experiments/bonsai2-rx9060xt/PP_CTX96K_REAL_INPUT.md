@@ -1,3 +1,27 @@
+## Alternating Bonsai2/Gemma4 cross-GPU validation (2026-10-19)
+
+Use the uploaded launch profiles as the baseline. The test alternates **Bonsai2 RX9060XT → Gemma4 RX9070XT → Bonsai2 RX9060XT → Gemma4 RX9070XT**, each with a **fresh llama-server process**, running only one GPU at a time. It measures exactly 32768 input tokens (each model uses its own tokenizer on the same source UTF-8 text) and up to 512 generated tokens, collecting PP, TG, draft acceptance, full raw response, CLI args, and startup logs (including any Vulkan buffer allocation lines). A model-to-model tok/s comparison is not controlled for architecture, quantization, context, or MTP design; compare each model to its own rounds instead.
+
+**Bonsai2**: Vulkan0, ctx 98304, KV Q8/Q4, integrated MTP draft 2, batch 4096, ubatch 256, threads 4, FA on, checkpoints 0, fit off.
+**Gemma4**: Vulkan1, ctx 65536, KV Q8/Q8, external Q8 MTP draft model, MTP draft 1, batch 4096, ubatch 1536, threads 2, FA on, checkpoints 0, fit off. Gemma's batch and ubatch are **preserved from the user's launcher**, not claimed optimized by Bonsai tests.
+
+PowerShell 7:
+
+\`\`\`powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+# Set both Gemma model paths to the existing local files.
+$env:GEMMA_MODEL_PATH = "<path-to-Gemma4-26B-A4B-Q4_K_XL.gguf>"
+$env:GEMMA_MTP_PATH = "<path-to-Gemma4-Q8_0-MTP.gguf>"
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_alternating_bonsai_gemma_pp_tg.ps1 \`
+  -GemmaModelPath $env:GEMMA_MODEL_PATH \`
+  -GemmaMtpPath $env:GEMMA_MTP_PATH \`
+  -Rounds 2
+\`\`\`
+
+The same existing \`distributed-summary-v01/dataset/prompt.txt\` is used. Ensure **the Gemma tokenizer also returns at least 32768 tokens**; the runner intentionally errors otherwise rather than repeating source text or silently changing the test size. The runner does **not** install telemetry software or report GPU temperature. Alternating loads mitigates sustained same-GPU activity but cannot prove or eliminate thermal effects: both GPUs may share case airflow, and power/display load may change.
+
+Results are saved to \`experiments/bonsai2-rx9060xt/alternating-pp-tg/results/alternating_*/\`. A case failure is retained as ERROR, not silently retried. Relevant logs: \`manifest.json\`, \`summary.csv\`, case-level \`server.stderr.log\`, \`arguments.json\`, and nested raw \`response_1.json\`.
+
 ## Reverse-order thermal/time drift control (2026-10-19)
 
 On Windows RX 9060 XT, the read-only telemetry probe found neither LibreHardwareMonitor nor OpenHardwareMonitor WMI namespaces; ADLX DLLs exist but the probe cannot directly read ADLX sensors. Do not treat missing temperature readings as proof that heating is absent.
