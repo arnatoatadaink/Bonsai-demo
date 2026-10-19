@@ -1,3 +1,12 @@
+## Batch divisibility follow-up (2026-10-19)
+
+The `pp-batch-divisibility` mode tests 12 combinations: logical batch sizes `4096,6144,8192,12288` crossed with microbatch sizes `256,320,384`. All ubatch values are multiples of 64. Three repetitions per case by default, MTP ON and 96k context/32k prefill unchanged. Run-level `summary.csv` includes `batch_remainder` and `batch_divisible`. Compare PP across configurations while keeping in mind that different batch sizes themselves can change performance; divisibility is a hypothesis, not established as a causal optimization. TG is logged but not used to exclude settings.
+
+```powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode pp-batch-divisibility -Repetitions 3
+```
+
 ## PP microbatch alignment follow-up (2026-10-18)
 
 Following the 18-configuration fine sweep, microbatches 224 and 288 showed reproducible PP slowdowns relative to 256 and 320. Use `pp-ubatch-alignment` to compare batch sizes 4096 and 8192 with microbatches 128, 160, 192, 256, 320, 352, 384, 448, 512 (18 cases, three trials each by default). MTP remains ON; context 98304, input 32768, generated 512, KV K Q8/V Q4, and draft 2 are unchanged. TG is recorded but not used as an exclusion criterion in this PP-focused sweep. Testing 32/64-multiple boundaries is an empirical hypothesis, not an established Vulkan kernel explanation.
