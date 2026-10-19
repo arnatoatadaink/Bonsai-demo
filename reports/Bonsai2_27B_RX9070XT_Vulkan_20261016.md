@@ -6,7 +6,7 @@
 
 | GPU (16 GB) | PP | TG | Evidence |
 |---|---:|---:|---|
-| **RX 9060 XT** | **310.27 t/s** | Not measured in this PP run | **MTP OFF**, 96K context / 32K input, 3-run mean |
+| **RX 9060 XT** | **310.27 t/s** | **29.83 t/s** | PP: MTP OFF, 96K context / 32K input, 3-run mean; TG: historical typical value |
 | RX 9070 XT | 743.67 t/s | 56.60 t/s | 4K short-context test only; **PP outlier** |
 
 **Note:** RX 9060 XT uses PCIe 3.0 x1; older low PP readings may be environment-specific. **The RX 9070 XT short-context PP result is not representative of long-context operation.**
@@ -167,7 +167,7 @@ Source run: `experiments/bonsai2-rx9060xt/pp-batch-v01/results/run_20261018_0012
 
 | GPU | Context | Prompt tokens | Generated tokens | PP t/s | TG t/s |
 |---|---:|---:|---:|---:|---:|
-| RX 9060 XT (MTP OFF, 3-run mean) | **98,304** | **32,768** | N/A | **310.27** | Not recorded in PP-only run |
+| RX 9060 XT (MTP OFF, 3-run PP mean) | **98,304** | **32,768** | N/A | **310.27** | **29.83 (historical typical TG; separate run)** |
 | RX 9070 XT (short-context outlier) | 4,096 | 2,292 | 1,804 | 743.67 | 56.60 |
 | RX 9060 XT (older record) | Not reconciled | Not reconciled | Not reconciled | 44.16 | 29.83 |
 
