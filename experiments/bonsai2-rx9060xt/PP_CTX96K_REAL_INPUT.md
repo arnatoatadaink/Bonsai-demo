@@ -1,3 +1,17 @@
+## Gemma4 ubatch 256 vs 1536 comparison (2026-10-19)
+
+The alternating runner supports `-GemmaUbatchCompare`. It defaults to four rounds, alternating Bonsai2 (RX9060XT, ubatch 256) with Gemma4 (RX9070XT), with Gemma's microbatch following **1536 → 256 → 256 → 1536** (ABBA). This balances chronological drift better than a single A/B comparison. Gemma's other settings, including ctx 65536, batch 4096, Q8/Q8 KV, and external MTP draft 1, remain unchanged. Each step restarts the server; the same dataset is tokenized separately by each model. Captured PP, TG, acceptance, and server allocation logs allow evaluation of memory use as well as speed. Gemma ubatch 256 is an unverified hypothesis, not known to be faster.
+
+```powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_alternating_bonsai_gemma_pp_tg.ps1 \
+  -GemmaModelPath "<local-gemma-gguf>" \
+  -GemmaMtpPath "<local-gemma-mtp-gguf>" \
+  -GemmaUbatchCompare
+```
+
+The code block is illustrative; on PowerShell, keep the command on one line or use backticks for continuation. Use `-Rounds 4` explicitly if preferred. Without `-GemmaUbatchCompare` the original two-round / Gemma ubatch 1536 behavior is unchanged.
+
 ## Alternating Bonsai2/Gemma4 cross-GPU validation (2026-10-19)
 
 Use the uploaded launch profiles as the baseline. The test alternates **Bonsai2 RX9060XT → Gemma4 RX9070XT → Bonsai2 RX9060XT → Gemma4 RX9070XT**, each with a **fresh llama-server process**, running only one GPU at a time. It measures exactly 32768 input tokens (each model uses its own tokenizer on the same source UTF-8 text) and up to 512 generated tokens, collecting PP, TG, draft acceptance, full raw response, CLI args, and startup logs (including any Vulkan buffer allocation lines). A model-to-model tok/s comparison is not controlled for architecture, quantization, context, or MTP design; compare each model to its own rounds instead.
