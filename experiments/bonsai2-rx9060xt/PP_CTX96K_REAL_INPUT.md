@@ -1,3 +1,16 @@
+## Reverse-order thermal/time drift control (2026-10-19)
+
+On Windows RX 9060 XT, the read-only telemetry probe found neither LibreHardwareMonitor nor OpenHardwareMonitor WMI namespaces; ADLX DLLs exist but the probe cannot directly read ADLX sensors. Do not treat missing temperature readings as proof that heating is absent.
+
+Repeat the **same** `pp-batch-divisibility` 12-case/3-trial sweep with the case order reversed, using `-CaseOrder descending`. All other test settings remain unchanged. The run manifest records the ordering.
+
+```powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\run_bonsai2_pp_ctx96k_auto.ps1 -Mode pp-batch-divisibility -CaseOrder descending -Repetitions 3
+```
+
+Contrast each case with its forward-order counterpart. If performance tracks execution position more strongly than batch, warming/time drift is plausible, but reverse order alone does not uniquely identify temperature (clock/power/display activity may also contribute). Each setting still has three repeated prompts within one server start.
+
 ## AMD GPU telemetry probe (2026-10-19)
 
 Before linking thermal metrics with performance, run the independent, read-only Windows capability probe. It checks AMD adapters, LibreHardwareMonitor/OpenHardwareMonitor WMI sensor namespaces, and records possible ADLX-related DLL presence (DLL presence **does not** mean usable telemetry). No software is downloaded or installed and no GPU settings are changed.
