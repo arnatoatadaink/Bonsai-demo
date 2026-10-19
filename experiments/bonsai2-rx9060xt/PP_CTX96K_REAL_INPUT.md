@@ -1,3 +1,14 @@
+## AMD GPU telemetry probe (2026-10-19)
+
+Before linking thermal metrics with performance, run the independent, read-only Windows capability probe. It checks AMD adapters, LibreHardwareMonitor/OpenHardwareMonitor WMI sensor namespaces, and records possible ADLX-related DLL presence (DLL presence **does not** mean usable telemetry). No software is downloaded or installed and no GPU settings are changed.
+
+```powershell
+git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
+pwsh -NoProfile -File .\experiments\bonsai2-rx9060xt\runner\test_amd_gpu_telemetry.ps1 -DurationSec 30 -IntervalSec 2
+```
+
+Output: `experiments/bonsai2-rx9060xt/gpu-telemetry/results/probe_*/` containing `adapters.json`, `probe.json`, `sensors.csv`, `summary.json`. If the sensor namespace is unavailable, run LibreHardwareMonitor with its WMI provider enabled and repeat; do not treat an empty CSV as 0 °C. Multiple GPUs may be present: sensor identifiers must be verified against the Radeon RX 9060 XT before attribution. ADLX (AMD official SDK) offers native temperature/hotspot/power/clock APIs, but requires a properly implemented client and is **not queried by this initial probe**. Do not infer GPU hotspot or VRAM temperature from Windows ACPI thermal zones. No real device measurements have yet been taken by this commit.
+
 ## Batch divisibility follow-up (2026-10-19)
 
 The `pp-batch-divisibility` mode tests 12 combinations: logical batch sizes `4096,6144,8192,12288` crossed with microbatch sizes `256,320,384`. All ubatch values are multiples of 64. Three repetitions per case by default, MTP ON and 96k context/32k prefill unchanged. Run-level `summary.csv` includes `batch_remainder` and `batch_divisible`. Compare PP across configurations while keeping in mind that different batch sizes themselves can change performance; divisibility is a hypothesis, not established as a causal optimization. TG is logged but not used to exclude settings.
