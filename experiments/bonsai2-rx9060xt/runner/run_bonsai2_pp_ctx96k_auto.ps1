@@ -4,7 +4,7 @@ param(
  [ValidateSet("baseline","quick","extended","downshift","downshift-extended","midpoint","midpoint-edge","pp-tg-all","tg-anomaly-recheck","mtp-pp-tg-focus","pp-ubatch-fine","pp-ubatch-alignment","pp-batch-divisibility")][string]$Mode="baseline",
  [int]$Port=18082, [string]$Device="Vulkan0", [ValidateRange(1,100)][int]$Repetitions=3,
  [int]$TimeoutSec=360, [ValidateRange(32,2048)][int]$GenerateTokens=512,
- [ValidateSet("on","off")][string]$Mtp="on", [double]$TgAnomalyThreshold=38.0, [string]$OutputDir=""
+ [ValidateSet("on","off")][string]$Mtp="on", [ValidateSet("ascending","descending")][string]$CaseOrder="ascending", [double]$TgAnomalyThreshold=38.0, [string]$OutputDir=""
 )
 $ErrorActionPreference="Stop"
 if ($Mode -eq "mtp-pp-tg-focus" -and -not $PSBoundParameters.ContainsKey("Repetitions")) { $Repetitions=5 }
@@ -33,6 +33,11 @@ switch($Mode){
  "pp-ubatch-alignment" {$bs=@(4096,8192);$ubs=@(128,160,192,256,320,352,384,448,512)}
  "pp-batch-divisibility" {$bs=@(4096,6144,8192,12288);$ubs=@(256,320,384)}
 }
+# Reverse the entire case order, including ubatch order within each batch.
+if($CaseOrder -eq "descending"){
+ $bs=@($bs | Sort-Object -Descending)
+ $ubs=@($ubs | Sort-Object -Descending)
+}
 $out=Join-Path $OutputDir ("run_"+(Get-Date -Format "yyyyMMdd_HHmmss")+"_ctx96k_pp32k_auto")
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $metadata=[ordered]@{
@@ -41,7 +46,7 @@ $metadata=[ordered]@{
  input_sha256=(Get-FileHash $InputPath -Algorithm SHA256).Hash
  mode=$Mode;device=$Device;context=98304;tokens=32768;repetitions=$Repetitions;generate_tokens=$GenerateTokens;tg_anomaly_threshold=$TgAnomalyThreshold
  kv="K Q8_0 / V Q4_0";flash_attention="on";mtp=$Mtp;spec_type=$(if($Mtp -eq "on"){"draft-mtp"}else{"none"});spec_draft_n_max=$(if($Mtp -eq "on"){2}else{0});fit="off";parallel=1
- batch_values=$bs;ubatch_values=$ubs;order="ascending batch then ascending ubatch";hypothesis="batch divisibility independent of ubatch 64 alignment"
+ batch_values=$bs;ubatch_values=$ubs;order="$CaseOrder batch then $CaseOrder ubatch";hypothesis="batch divisibility independent of ubatch 64 alignment"
 }
 $metadata|ConvertTo-Json|Set-Content (Join-Path $out "manifest.json")
 $rows=@();$trialRows=@()
