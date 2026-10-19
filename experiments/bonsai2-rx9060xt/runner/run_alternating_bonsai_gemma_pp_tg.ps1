@@ -9,6 +9,7 @@ param(
  [string]$InputPath="",
  [string]$OutputDir="",
  [ValidateRange(1,100)][int]$Rounds=2,
+ [switch]$GemmaUbatchCompare,
  [ValidateRange(32,2048)][int]$GenerateTokens=512,
  [int]$Port=18082,
  [ValidateRange(60,1800)][int]$StartupTimeoutSec=360,
@@ -30,6 +31,8 @@ function PortOccupied([int]$p){
  return [bool]@(Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue).Count
 }
 if(PortOccupied $Port){throw "Port $Port is in use. Stop the existing server."}
+if($GemmaUbatchCompare -and -not $PSBoundParameters.ContainsKey("Rounds")){$Rounds=4}
+$gemmaSchedule=@(1536,256,256,1536)
 $stamp=Get-Date -Format "yyyyMMdd_HHmmss"
 $out=Join-Path $OutputDir "alternating_$stamp"
 New-Item -ItemType Directory -Path $out -Force|Out-Null
@@ -44,7 +47,7 @@ $profiles=@(
  }
 )
 $manifest=[ordered]@{
- order="Bonsai2 then Gemma4, repeated by round";rounds=$Rounds
+ order="Bonsai2 then Gemma4, repeated by round";rounds=$Rounds;gemma_ubatch_compare=$GemmaUbatchCompare.IsPresent;gemma_ubatch_sequence=$(if($GemmaUbatchCompare){@(1..$Rounds | ForEach-Object {$gemmaSchedule[($_-1)%4]})}else{@(1536)})
  prompt_tokens=32768;generate_tokens=$GenerateTokens;between_runs_sec=$BetweenRunsSec
  server_sha256=(Get-FileHash -LiteralPath $ServerPath -Algorithm SHA256).Hash
  input_sha256=(Get-FileHash -LiteralPath $InputPath -Algorithm SHA256).Hash
@@ -59,13 +62,14 @@ $manifest|ConvertTo-Json -Depth 12|Set-Content (Join-Path $out "manifest.json") 
 $rows=@()
 for($round=1;$round -le $Rounds;$round++){
  foreach($p in $profiles){
-  $id="{0}_round{1}" -f $p.name,$round
+  $caseUb=if($p.name -eq "gemma4" -and $GemmaUbatchCompare){$gemmaSchedule[($round-1)%4]}else{$p.ubatch}
+  $id="{0}_round{1}_ub{2}" -f $p.name,$round,$caseUb
   $dir=Join-Path $out $id
   New-Item -ItemType Directory -Path $dir -Force|Out-Null
   $argsList=@("--model",$p.model,"--device",$p.device,"--split-mode","none",
     "--gpu-layers",[string]$p.layers,"--ctx-size",[string]$p.ctx,
     "--cache-type-k",$p.k,"--cache-type-v",$p.v,"--threads",[string]$p.threads,
-    "--batch-size",[string]$p.batch,"--ubatch-size",[string]$p.ubatch,
+    "--batch-size",[string]$p.batch,"--ubatch-size",[string]$caseUb,
     "--parallel","1","--flash-attn","on","--ctx-checkpoints","0",
     "--spec-type","draft-mtp","--spec-draft-n-max",[string]$p.draftN,
     "--jinja","--host","127.0.0.1","--port",[string]$Port,"--load-mode","none")
@@ -123,7 +127,7 @@ for($round=1;$round -le $Rounds;$round++){
    if($stdout){$stdout.Dispose()}
    if($stderr){$stderr.Dispose()}
   }
-  $rows+=[pscustomobject]@{round=$round;case=$id;model=$p.name;gpu=$p.device;batch=$p.batch;ubatch=$p.ubatch
+  $rows+=[pscustomobject]@{round=$round;case=$id;model=$p.name;gpu=$p.device;batch=$p.batch;ubatch=$caseUb
     context=$p.ctx;prompt_tokens=32768;generate_tokens=$GenerateTokens;status=$status
     pp_tok_s=$pp;tg_tok_s=$tg;draft_acceptance_pct=$draft;error=$reason}
   $rows|Export-Csv (Join-Path $out "summary.csv") -NoTypeInformation -Encoding utf8
