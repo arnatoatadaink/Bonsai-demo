@@ -232,3 +232,6 @@ llama.cpp
 .venv-hermes/
 .agent-browser/
 agent-runs/
+
+# Local test-machine paths (never commit)
+experiments/bonsai2-rx9060xt/paths.local.psd1
