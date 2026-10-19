@@ -1,7 +1,7 @@
 # Bonsai2-27B GPU verification status (2026-10-16)
 
 ## Verified
-- **RX 9060 XT 16 GB**: Bonsai2-27B PQ2_0 previously verified on Windows/Vulkan. **Preferred MTP OFF long-context PP evidence:** 96K context, 32K input, `-b 32768 -ub 512`, K Q8_0 / V Q4_0, 3/3 valid PP measurements 313.79 / 309.05 / 307.96 t/s (**mean 310.27 t/s**, `cache_n=0`). Historical 44.16 PP and 29.83 TG need original test condition reconciliation.
+- **RX 9060 XT 16 GB**: Bonsai2-27B PQ2_0 previously verified on Windows/Vulkan. **Preferred MTP OFF long-context PP evidence:** 96K context, 32K input, `-b 32768 -ub 512`, K Q8_0 / V Q4_0, 3/3 valid PP measurements 313.79 / 309.05 / 307.96 t/s (**mean 310.27 t/s**, `cache_n=0`). Historical 44.16 PP is superseded for this report. **TG 29.83 t/s remains the typical RX 9060 XT result (historical separate measurement); it was not measured during the 96K/32K PP-only run.**
 - **RX 9070 XT 16 GB**: Bonsai2-27B PQ2_0 independently verified on Vulkan1, PrismML llama.cpp build 10772, commit `e8fd209c9`, AMD Adrenalin 26.3.1. Model loaded, 2,292 tokens evaluated, 1,804 tokens generated. **PP 743.6696 t/s (4K short-context outlier, NOT representative of long-context PP), TG 56.5965 t/s**. First raw completion test returned EOS immediately; second chat-template test successfully performed sustained generation.
 
 ## RX 9060 XT MTP OFF long-context PP evidence
