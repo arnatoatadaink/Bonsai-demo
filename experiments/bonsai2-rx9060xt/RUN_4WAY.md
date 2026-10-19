@@ -18,7 +18,27 @@ git pull --ff-only origin bench/bonsai2-rx9060xt-pp-batch-20261017
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 ```
 
-## Run
+## Recommended: fixed local paths, one-time configuration
+
+This approach is **manual configuration, not auto-discovery**. Paths are kept local and are not published in Git.
+
+```powershell
+Copy-Item .\experiments\bonsai2-rx9060xt\paths.example.psd1 `
+          .\experiments\bonsai2-rx9060xt\paths.local.psd1
+notepad .\experiments\bonsai2-rx9060xt\paths.local.psd1
+```
+
+Edit the three absolute paths (llama-server.exe, Bonsai2-27B **MTP-capable** GGUF, and the original prompt.txt). The expected relative location of the **local** input is `experiments/bonsai2-rx9060xt/distributed-summary-v01/dataset/prompt.txt` if that directory exists on your PC; Git does not contain that dataset.
+
+Run from repository root:
+
+```powershell
+.\experiments\bonsai2-rx9060xt\start_4way_fixed.ps1
+```
+
+The launcher checks exactly the three paths you configured, then invokes `run_bonsai2_4way_pp_tg.ps1` with 3 repetitions. No file search, automatic downloads, or fallback model selection occurs. Preserve `paths.local.psd1` locally; do not commit it.
+
+## Run (alternative: specify paths on each call)
 
 ```powershell
 $server = '<path-to-PrismML-llama-server.exe>'
