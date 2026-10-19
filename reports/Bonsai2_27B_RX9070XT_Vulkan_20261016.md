@@ -4,14 +4,14 @@
 
 **Bonsai 2 27B PQ2_0 works on both RX 9060 XT and RX 9070 XT with PrismML llama.cpp / Vulkan.**
 
-| GPU (16 GB) | PP | TG |
-|---|---:|---:|
-| **RX 9070 XT** | **743.67 t/s** | **56.60 t/s** |
-| **RX 9060 XT** | **44.16 t/s** | **29.83 t/s** |
+| GPU (16 GB) | PP | TG | Evidence |
+|---|---:|---:|---|
+| **RX 9060 XT** | **310.27 t/s** | Not measured in this PP run | **MTP OFF**, 96K context / 32K input, 3-run mean |
+| RX 9070 XT | 743.67 t/s | 56.60 t/s | 4K short-context test only; **PP outlier** |
 
-**Note:** The RX 9060 XT's unusually low PP may be related to its PCIe 3.0 x1 connection.
+**Note:** RX 9060 XT uses PCIe 3.0 x1; older low PP readings may be environment-specific. **The RX 9070 XT short-context PP result is not representative of long-context operation.**
 
-**Separate test runs; not a controlled comparison. Tested on Windows 11 using Windows PowerShell 5.1.**
+**These are separate test configurations, not a controlled GPU comparison. All Windows commands target Windows PowerShell 5.1.**
 
 ## 1. Test Environment
 
@@ -109,7 +109,7 @@ Image input is not used in this text-only test; mmproj is optional.
 
 ## 5. Launch and Verification
 
-The actual Vulkan device indices vary by PC: use --list-devices before choosing the ID. Start one GPU server at a time, without MTP.
+The actual Vulkan device indices vary by PC: use --list-devices before choosing the ID. Start one GPU server at a time, without MTP. This 4K launch is only a smoke test, **not** the RX 9060 XT 96K/32K PP tuning setup.
 
 ```powershell
 & $server --list-devices
@@ -141,12 +141,37 @@ For RX 9060 XT, change `-GpuName` to `"RX 9060 XT"`. Benchmark results from each
 
 ## 6. Evidence and Performance
 
+### RX 9060 XT — long-context prompt processing, MTP OFF
+
+**This is the primary PP performance reference in this report.** Measured on Bonsai 2 27B PQ2_0 with RX 9060 XT / Vulkan, MTP **OFF**, context **98,304 tokens**, prompt **32,768 tokens**, KV cache **K Q8_0 / V Q4_0**, logical batch `-b 32768`, physical microbatch `-ub 512`.
+
+| Trial | PP (tokens/s) |
+|---|---:|
+| 1 | 313.79 |
+| 2 | 309.05 |
+| 3 | 307.96 |
+| **Mean (3/3 valid)** | **310.27** |
+
+Source run: `experiments/bonsai2-rx9060xt/pp-batch-v01/results/run_20261018_001236_ctx96k_pp32k_auto` (local experiment path; raw run records not committed with this report). Repeats recorded `cache_n=0`. Runner: `run_bonsai2_pp_ctx96k_auto.ps1` (experiment runner, not the general smoke-test script below).
+
+**MTP ON measurements are intentionally excluded** from this report and these PP statistics. Other MTP OFF exploratory results with `-b 32768` were 308.71 t/s (`-ub 512`), 294.88 t/s (`-ub 1024`), and 292.14 t/s (`-ub 1536`). These suggest larger microbatches did not improve throughput in the tested setup, not a universal optimal setting.
+
+### llama.cpp PP tuning notes
+
+- `-b` / `--batch-size` controls logical batch size; `-ub` / `--ubatch-size` controls physical microbatch size. Verify flags with the installed PrismML fork’s `--help`.
+- For **the RX 9060 XT 96K/32K workload**, `-b 32768 -ub 512` is the **best documented MTP OFF baseline** here. Do not infer that it is optimal at 4K or on another GPU.
+- Keep **MTP OFF**, input tokens, context, K/V types, Flash Attention, GPU placement, cache reuse, and software build fixed when changing `-b` or `-ub`. Compare multiple repeats.
+- The generic 4K verification script in Section 5 is a smoke test **not the 96K/32K performance benchmark**; its PP output must not be substituted for the MTP OFF long-context result.
+
+### Other historical measurements
+
 | GPU | Context | Prompt tokens | Generated tokens | PP t/s | TG t/s |
 |---|---:|---:|---:|---:|---:|
-| RX 9070 XT | **4,096** | **2,292** | **1,804** | **743.67** | **56.60** |
-| RX 9060 XT (historical) | Not reconciled | Not reconciled | Not reconciled | 44.16 | 29.83 |
+| RX 9060 XT (MTP OFF, 3-run mean) | **98,304** | **32,768** | N/A | **310.27** | Not recorded in PP-only run |
+| RX 9070 XT (short-context outlier) | 4,096 | 2,292 | 1,804 | 743.67 | 56.60 |
+| RX 9060 XT (older record) | Not reconciled | Not reconciled | Not reconciled | 44.16 | 29.83 |
 
-**No context-length sweep has been recorded for Bonsai2-27B on RX9070XT.** Do not infer 8K/32K/64K throughput from the 4K run. A context-length performance graph will be added only when multiple measured contexts are available.
+**Do not interpret the RX 9070 XT 743.67 t/s (4K) as a typical long-context PP rate.** No matched RX 9070 XT 96K/32K test is available. There is not yet a controlled *context-length sweep* to graph.
 
 
 
@@ -154,6 +179,6 @@ RX9070XT timing detail: PP 2,292 tokens / 3,082.014 ms; TG 1,804 tokens / 31,857
 
 Original evidence archive: bonsai2_rx9070xt_20261016_144533.zip (user-provided, not committed). Model SHA256: 3907DC1658DB1F78A9826BF8D5BCB8DC65DB0D466388937AF57F2294FAE62EC1. Measured local-binary SHA256: 1BF104B2C3274899EF20BA92AFFDBBDAFB6CFD0903621C2492E702A284D16FEE.
 
-**PCIe note:** RX 9060 XT runs in the PCIe 3.0 x1 secondary slot to preserve USB bandwidth. The unusual PP gap is environment-dependent and cannot establish an intrinsic GPU speed ratio.
+**PCIe note:** RX 9060 XT runs in the PCIe 3.0 x1 secondary slot to preserve USB bandwidth. The old low PP result may be environment-dependent; the 4K RX 9070 XT PP result is also a short-context outlier. Neither establishes an intrinsic GPU speed ratio.
 
 Power XML: -30% limit enabled; -65 mV and -500 MHz offsets saved but not enabled. Detailed provenance: [VERIFIED_GPU_STATUS.md](VERIFIED_GPU_STATUS.md). Gemma/Qwen comparisons and MTP stability are deliberately excluded.
