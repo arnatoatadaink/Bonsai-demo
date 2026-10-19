@@ -1,10 +1,9 @@
-# Sequential alternating Bonsai2 RX9060XT / Gemma4 RX9070XT PP+TG validation.
+# Four-way Bonsai2 27B GPU x MTP ON/OFF reproducibility matrix.
 # PowerShell 7; no concurrent GPU work. Existing dataset and child timing runner.
 [CmdletBinding()]
 param(
  [string]$ServerPath="",
  [string]$BonsaiModelPath="",
- 
  [string]$InputPath="",
  [string]$OutputDir="",
  [ValidateRange(1,100)][int]$Repetitions=3,
@@ -48,7 +47,7 @@ $manifest=[ordered]@{
     model_sha256=(Get-FileHash -LiteralPath $_.model -Algorithm SHA256).Hash
 }
  })
- note="Same Bonsai GGUF, same prompt token IDs, context, KV and batch/ubatch. Only GPU and MTP vary. GPU device IDs must be verified. Each case makes 3 completion requests in one server start."
+ note="Same Bonsai GGUF, same prompt token IDs, context, KV and batch/ubatch. Only GPU and MTP vary. Verify GPU device IDs with --list-devices. Each case makes Repetitions completion requests in one server start."
 }
 $manifest|ConvertTo-Json -Depth 12|Set-Content (Join-Path $out "manifest.json") -Encoding utf8
 $rows=@()
